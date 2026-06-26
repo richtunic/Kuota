@@ -1,5 +1,10 @@
 # HANDOFF
 
+## Actualización 2026-06-25: icono de aplicación
+
+- Icono de launcher actualizado desde `/Users/richtunic/Downloads/Kuota Icon APP.png`: `src-tauri/icons/app-source.png`, PNGs de bundle, `icon.icns` y `icon.ico`.
+- El icono de menubar/tray queda separado en `src-tauri/icons/tray.png` y no se cambió.
+
 ## Estado actual 2026-06-25
 
 Actualización UI: el popup se reacomodó para parecerse más a CodexBar, manteniendo el tema oscuro propio.
