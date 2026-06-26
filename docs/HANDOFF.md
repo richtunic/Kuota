@@ -5,6 +5,10 @@
 - Icono de launcher actualizado desde `/Users/richtunic/Downloads/Kuota Icon APP.png`: `src-tauri/icons/app-source.png`, PNGs de bundle, `icon.icns` y `icon.ico`.
 - El icono de menubar/tray queda separado en `src-tauri/icons/tray.png` y no se cambió.
 
+## Actualización 2026-06-26: aclaración de cuota
+
+- README aclarado: Kuota ejecuta `codex-auth list` sin `--skip-api`, usando la consulta API por defecto de `codex-auth`, pero la app refresca snapshots cada 60 segundos y al recuperar foco; no usa streaming en tiempo real.
+
 ## Estado actual 2026-06-25
 
 Actualización UI: el popup se reacomodó para parecerse más a CodexBar, manteniendo el tema oscuro propio.

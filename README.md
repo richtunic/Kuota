@@ -19,7 +19,7 @@ La app vive en la barra del sistema:
 - En macOS se despliega desde la menu bar.
 - En Windows/Linux se despliega desde la bandeja inferior.
 - Muestra una card por cuenta.
-- Refresca el uso automaticamente cada 60 segundos.
+- Refresca la cuota automaticamente consultando `codex-auth` cada 60 segundos.
 - Permite cambiar la cuenta activa de Codex.
 - Muestra el uso restante de la ventana de 5 horas y semanal.
 
@@ -70,7 +70,7 @@ La vista principal muestra:
 - ultima actividad;
 - cuenta activa en Codex.
 
-La informacion se actualiza cada 60 segundos y tambien cuando la app vuelve a tomar foco.
+Kuota obtiene esta informacion ejecutando `codex-auth list` sin `--skip-api`, por lo que usa la consulta API que `codex-auth` trae activa por defecto. No es un stream en tiempo real dentro de Kuota: la app toma un snapshot actualizado al abrir, cada 60 segundos y tambien cuando la ventana vuelve a tomar foco.
 
 ### 4. Cambiar cuenta activa
 
