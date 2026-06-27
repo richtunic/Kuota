@@ -1964,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "kuota"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "dirs 5.0.1",
  "lazy_static",

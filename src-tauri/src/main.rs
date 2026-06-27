@@ -232,24 +232,61 @@ fn locate_codex_auth() -> Option<PathBuf> {
 
 fn locate_command(command: &str) -> Option<PathBuf> {
     let mut candidates = Vec::new();
+    let command_names = command_variants(command);
 
     if let Ok(path) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path) {
-            candidates.push(dir.join(command));
+            for command_name in &command_names {
+                candidates.push(dir.join(command_name));
+            }
         }
     }
 
     if let Ok(home) = std::env::var("HOME") {
-        candidates.push(PathBuf::from(&home).join(".npm-global/bin").join(command));
-        candidates.push(PathBuf::from(&home).join(".local/bin").join(command));
-        candidates.push(PathBuf::from(&home).join(".nvm/current/bin").join(command));
+        for command_name in &command_names {
+            candidates.push(
+                PathBuf::from(&home)
+                    .join(".npm-global/bin")
+                    .join(command_name),
+            );
+            candidates.push(PathBuf::from(&home).join(".local/bin").join(command_name));
+            candidates.push(
+                PathBuf::from(&home)
+                    .join(".nvm/current/bin")
+                    .join(command_name),
+            );
+        }
     }
 
-    candidates.push(PathBuf::from("/opt/homebrew/bin").join(command));
-    candidates.push(PathBuf::from("/usr/local/bin").join(command));
-    candidates.push(PathBuf::from("/usr/bin").join(command));
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        for command_name in &command_names {
+            candidates.push(PathBuf::from(&appdata).join("npm").join(command_name));
+        }
+    }
+
+    for command_name in &command_names {
+        candidates.push(PathBuf::from("/opt/homebrew/bin").join(command_name));
+        candidates.push(PathBuf::from("/usr/local/bin").join(command_name));
+        candidates.push(PathBuf::from("/usr/bin").join(command_name));
+    }
 
     candidates.into_iter().find(|path| path.exists())
+}
+
+fn command_variants(command: &str) -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        vec![
+            format!("{}.cmd", command),
+            format!("{}.exe", command),
+            command.to_string(),
+        ]
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![command.to_string()]
+    }
 }
 
 fn run_command(path: PathBuf, args: &[&str]) -> Result<String, String> {
@@ -340,20 +377,27 @@ fn normalize_version(version: &str) -> String {
 }
 
 fn extended_path() -> String {
-    let mut parts = Vec::new();
+    let mut parts: Vec<PathBuf> = Vec::new();
     if let Ok(path) = std::env::var("PATH") {
-        parts.push(path);
+        parts.extend(std::env::split_paths(&path));
     }
 
     if let Ok(home) = std::env::var("HOME") {
-        parts.push(format!("{}/.npm-global/bin", home));
-        parts.push(format!("{}/.local/bin", home));
+        parts.push(PathBuf::from(&home).join(".npm-global/bin"));
+        parts.push(PathBuf::from(&home).join(".local/bin"));
     }
 
-    parts.push("/opt/homebrew/bin".to_string());
-    parts.push("/usr/local/bin".to_string());
-    parts.push("/usr/bin".to_string());
-    parts.join(":")
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        parts.push(PathBuf::from(appdata).join("npm"));
+    }
+
+    parts.push(PathBuf::from("/opt/homebrew/bin"));
+    parts.push(PathBuf::from("/usr/local/bin"));
+    parts.push(PathBuf::from("/usr/bin"));
+
+    std::env::join_paths(parts)
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 fn detect_codex_target() -> CodexTarget {

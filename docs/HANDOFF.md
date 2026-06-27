@@ -1,5 +1,12 @@
 # HANDOFF
 
+## Actualización 2026-06-26: codex-auth en Windows
+
+- Versión de release preparada como `1.0.1`.
+- Se corrigió la detección de comandos para Windows: Kuota ahora prioriza variantes `.cmd` y `.exe` de `npm` y `codex-auth` antes del shim sin extensión.
+- Se agregó la ruta global típica de npm en Windows (`%APPDATA%/npm`) a la búsqueda y al `PATH` usado por comandos internos.
+- `extended_path` ahora usa `std::env::join_paths`, evitando separar rutas con `:` en Windows donde corresponde `;`.
+
 ## Actualización 2026-06-25: icono de aplicación
 
 - Icono de launcher actualizado desde `/Users/richtunic/Downloads/Kuota Icon APP.png`: `src-tauri/icons/app-source.png`, PNGs de bundle, `icon.icns` y `icon.ico`.
