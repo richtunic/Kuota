@@ -1,5 +1,11 @@
 # HANDOFF
 
+## Actualización 2026-06-28: automatización de releases
+
+- `.github/workflows/release.yml` ahora genera notas de release desde los commits incluidos entre el tag anterior y el tag nuevo.
+- En cada push de tag `v*`, el workflow intenta avanzar `main` con fast-forward al commit del tag para que el código fuente público quede en la versión más reciente.
+- Las releases dejan de quedar como draft si el build de Tauri termina correctamente.
+
 ## Actualización 2026-06-28: release 1.0.2
 
 - Versión preparada como `1.0.2` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
