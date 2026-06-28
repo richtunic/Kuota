@@ -18,6 +18,7 @@ interface AppState {
   switchingAccountId: string | null
   bootstrappingCodexAuth: boolean
   checkingUpdates: boolean
+  updatesUpToDate: boolean
   language: Language
 
   addAccount: (account: Omit<ConfiguredAccount, 'id'>) => void
@@ -114,9 +115,10 @@ export const useStore = create<AppState>()(
       error: null,
     lastSync: null,
     switchingAccountId: null,
-    bootstrappingCodexAuth: false,
-    checkingUpdates: false,
-    language: 'es',
+      bootstrappingCodexAuth: false,
+      checkingUpdates: false,
+      updatesUpToDate: false,
+      language: 'es',
 
       addAccount: (account) => {
       const nextAccount = { ...account, id: crypto.randomUUID() }
@@ -226,7 +228,7 @@ export const useStore = create<AppState>()(
     },
 
     checkAllUpdates: async () => {
-      set({ checkingUpdates: true, bootstrappingCodexAuth: true, error: null })
+        set({ checkingUpdates: true, bootstrappingCodexAuth: true, updatesUpToDate: false, error: null })
 
       try {
         const status = await invoke<CodexAuthStatus>('ensure_codex_auth')
@@ -238,13 +240,14 @@ export const useStore = create<AppState>()(
         }))
 
         const update = await check()
-        if (update) {
-          await update.downloadAndInstall()
-          await relaunch()
-        }
-      } catch (error) {
-        set({ error: humanizeUpdateError(error) })
-      } finally {
+          if (update) {
+            await update.downloadAndInstall()
+            await relaunch()
+          }
+          set({ updatesUpToDate: true })
+        } catch (error) {
+          set({ error: humanizeUpdateError(error), updatesUpToDate: false })
+        } finally {
         set({ checkingUpdates: false, bootstrappingCodexAuth: false })
       }
     },

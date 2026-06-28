@@ -1,6 +1,6 @@
 [package]
 name = "kuota"
-version = "1.0.1"
+version = "1.0.2"
 description = "Kuota - Codex account switcher powered by codex-auth"
 authors = ["RichTunic"]
 edition = "2021"

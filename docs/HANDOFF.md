@@ -1,5 +1,22 @@
 # HANDOFF
 
+## Actualización 2026-06-28: release 1.0.2
+
+- Versión preparada como `1.0.2` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
+- Incluye los arreglos de ventanas de consola en Windows, estado de actualización al día y cierre visual del popover al perder foco.
+
+## Actualización 2026-06-28: ventanas de consola en Windows
+
+- Se centralizó la creación de procesos internos en `src-tauri/src/main.rs` con `hidden_command`.
+- En Windows, los comandos automáticos (`npm`, `codex-auth status/list/version/switch` y aperturas internas) se ejecutan con `CREATE_NO_WINDOW` para evitar ventanas de consola repetidas mientras se usa la app.
+- Se dejó `codex-auth login` como proceso visible/interactivo fuera de macOS, porque puede requerir mostrar instrucciones o recibir entrada del usuario.
+- Validado con `cargo check` local y compilación mínima de `CommandExt + CREATE_NO_WINDOW` contra `x86_64-pc-windows-msvc`; el check completo de Windows queda bloqueado en esta máquina por toolchain nativo faltante para `ring` (`assert.h`).
+
+## Actualización 2026-06-28: ajustes visuales del popover
+
+- El botón de búsqueda de actualizaciones ahora muestra `Ya tienes la versión más reciente bro` cuando termina una revisión sin encontrar actualizaciones.
+- La ventana `popover` se oculta automáticamente cuando pierde foco, para cerrar visualmente la app al hacer click fuera sin volver a presionar el icono del tray.
+
 ## Actualización 2026-06-26: codex-auth en Windows
 
 - Versión de release preparada como `1.0.1`.

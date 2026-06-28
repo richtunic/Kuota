@@ -27,6 +27,7 @@ const copy = {
     prepare: 'Preparar codex-auth',
     preparing: 'Preparando...',
     checkUpdates: 'Buscar actualizaciones',
+    upToDateBro: 'Ya tienes la versión más reciente bro',
     aboutKuota: 'Acerca de Kuota',
     manageAccounts: 'Eliminar cuentas',
     settings: 'Ajustes',
@@ -70,6 +71,7 @@ const copy = {
     prepare: 'Prepare codex-auth',
     preparing: 'Preparing...',
     checkUpdates: 'Check for updates',
+    upToDateBro: "You're on the latest version",
     aboutKuota: 'About Kuota',
     manageAccounts: 'Remove accounts',
     settings: 'Settings',
@@ -103,6 +105,7 @@ export default function App() {
     switchingAccountId,
     bootstrappingCodexAuth,
     checkingUpdates,
+    updatesUpToDate,
     language,
     addAccount,
     deleteAccount,
@@ -151,6 +154,13 @@ export default function App() {
   const syncLabel = lastSync ? `${t.updated} ${formatAgo(lastSync, language)}` : t.notSynced
   const version = codexAuth?.version?.replace('codex-auth ', '') ?? '-'
   const latest = codexAuth?.latest_version ?? version
+  const updateLabel = checkingUpdates
+    ? t.checking
+    : codexAuth?.update_available
+      ? `${t.update} ${latest}`
+      : updatesUpToDate
+        ? t.upToDateBro
+        : t.checkUpdates
 
   return (
     <div
@@ -203,7 +213,7 @@ export default function App() {
           language={language}
           setLanguage={setLanguage}
           onDelete={deleteAccount}
-          updateLabel={checkingUpdates ? t.checking : codexAuth?.update_available ? `${t.update} ${latest}` : t.checkUpdates}
+          updateLabel={updateLabel}
           updateDisabled={checkingUpdates || bootstrappingCodexAuth}
           onCheckUpdates={checkAllUpdates}
           onClose={() => setShowSettings(false)}
@@ -213,7 +223,7 @@ export default function App() {
       {showAbout && (
         <AboutModal
           t={t}
-          appVersion="1.0.0"
+          appVersion="1.0.2"
           codexAuthVersion={version}
           onClose={() => setShowAbout(false)}
         />

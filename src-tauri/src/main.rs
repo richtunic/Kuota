@@ -4,8 +4,11 @@ mod tray;
 
 use serde::Serialize;
 use std::path::PathBuf;
+use std::process::Command;
 
 const CODEX_AUTH_PACKAGE: &str = "@loongphy/codex-auth";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Debug, Clone, Copy)]
 enum CodexTarget {
@@ -54,10 +57,13 @@ fn main() {
             tray::setup_tray(app)?;
             Ok(())
         })
-        .on_window_event(|_, event| {
+        .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 #[cfg(target_os = "macos")]
                 let _ = disable_system_proxy();
+            }
+            if matches!(event, tauri::WindowEvent::Focused(false)) && window.label() == "popover" {
+                let _ = window.hide();
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -160,6 +166,20 @@ fn apple_script_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+#[cfg(target_os = "windows")]
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let command = Command::new(program);
+    command
+}
+
 fn read_codex_auth_status(latest_version: Option<String>) -> CodexAuthStatus {
     let Some(path) = locate_codex_auth() else {
         return CodexAuthStatus {
@@ -200,7 +220,7 @@ fn read_codex_auth_status(latest_version: Option<String>) -> CodexAuthStatus {
 fn install_or_update_codex_auth() -> Result<(), String> {
     let npm = locate_command("npm")
         .ok_or_else(|| "npm no esta instalado o no esta en PATH".to_string())?;
-    let output = std::process::Command::new(npm)
+    let output = hidden_command(npm)
         .args(["install", "-g", "@loongphy/codex-auth@latest"])
         .env("PATH", extended_path())
         .output()
@@ -290,7 +310,7 @@ fn command_variants(command: &str) -> Vec<String> {
 }
 
 fn run_command(path: PathBuf, args: &[&str]) -> Result<String, String> {
-    let output = std::process::Command::new(path)
+    let output = hidden_command(path)
         .args(args)
         .env("PATH", extended_path())
         .output()
@@ -407,7 +427,7 @@ fn detect_codex_target() -> CodexTarget {
             return CodexTarget::Desktop;
         }
 
-        let ps = std::process::Command::new("ps").args(["aux"]).output();
+        let ps = hidden_command("ps").args(["aux"]).output();
         if let Ok(output) = ps {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let cli_running = stdout.lines().any(|line| {
@@ -435,7 +455,7 @@ fn restart_codex_target(target: CodexTarget) {
 }
 
 fn process_output_contains(command: &str, args: &[&str], needle: &str) -> bool {
-    std::process::Command::new(command)
+    hidden_command(command)
         .args(args)
         .output()
         .map(|output| String::from_utf8_lossy(&output.stdout).contains(needle))
@@ -445,13 +465,11 @@ fn process_output_contains(command: &str, args: &[&str], needle: &str) -> bool {
 fn restart_codex_desktop() {
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("osascript")
+        let _ = hidden_command("osascript")
             .args(["-e", "tell application \"Codex\" to quit"])
             .status();
         std::thread::sleep(std::time::Duration::from_millis(800));
-        let _ = std::process::Command::new("open")
-            .args(["-a", "Codex"])
-            .spawn();
+        let _ = hidden_command("open").args(["-a", "Codex"]).spawn();
     }
 }
 
@@ -463,9 +481,7 @@ fn open_codex_cli() {
             "tell application \"Terminal\"\ndo script {}\nactivate\nend tell",
             apple_script_string(command)
         );
-        let _ = std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .status();
+        let _ = hidden_command("osascript").args(["-e", &script]).status();
     }
 }
 
@@ -473,10 +489,10 @@ fn open_codex_cli() {
 fn disable_system_proxy() -> Result<(), String> {
     let services = ["Wi-Fi", "Ethernet", "USB 10/100/1000 LAN"];
     for service in services {
-        let _ = std::process::Command::new("networksetup")
+        let _ = hidden_command("networksetup")
             .args(["-setwebproxystate", service, "off"])
             .output();
-        let _ = std::process::Command::new("networksetup")
+        let _ = hidden_command("networksetup")
             .args(["-setsecurewebproxystate", service, "off"])
             .output();
     }
