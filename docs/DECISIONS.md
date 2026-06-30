@@ -1,6 +1,12 @@
 # DECISIONS
 
 Fecha: 2026-06-30
+Decisión: Suspender builds Linux en releases hasta nuevo aviso.
+Motivo: El foco de prueba y soporte actual es macOS y Windows; publicar Linux sin validación puede comunicar soporte que todavía no se está manteniendo.
+Alternativas descartadas: Mantener Linux en el matrix, porque generaría assets no validados; borrar soporte de código, porque no es necesario para dejar de publicar builds.
+Impacto: `.github/workflows/release.yml` solo genera assets para macOS y Windows.
+
+Fecha: 2026-06-30
 Decisión: Publicar los cambios como release `1.0.3`.
 Motivo: Los cambios corrigen comportamiento visible y de plataforma en Windows/macOS, y deben llegar por el flujo de releases/autoupdate existente.
 Alternativas descartadas: Esperar a una release mayor, porque el fix de login en Windows desbloquea una función principal; cambiar el workflow de release, porque el flujo actual por tag `v*` ya cubre el caso.

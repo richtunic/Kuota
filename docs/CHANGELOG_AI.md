@@ -1,6 +1,21 @@
 # CHANGELOG_AI
 
 Fecha: 2026-06-30
+Tarea: Limitar releases a macOS y Windows
+Cambios:
+- El workflow de release deja de compilar Linux hasta nuevo aviso.
+- Las notas automáticas de release ahora anuncian assets solo para macOS y Windows.
+Archivos:
+- `.github/workflows/release.yml`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- Pendiente de ejecución en GitHub Actions.
+Notas:
+- Se canceló el workflow inicial de `v1.0.3` para evitar publicar assets Linux.
+
+Fecha: 2026-06-30
 Tarea: Preparar release 1.0.3
 Cambios:
 - Versión actualizada a `1.0.3` en package, Tauri, Cargo y modal Acerca de Kuota.

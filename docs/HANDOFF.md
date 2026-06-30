@@ -1,5 +1,11 @@
 # HANDOFF
 
+## Actualización 2026-06-30: releases solo macOS y Windows
+
+- `.github/workflows/release.yml` deja fuera `ubuntu-22.04` del matrix hasta nuevo aviso.
+- Las notas generadas por el workflow ahora anuncian builds para macOS y Windows.
+- Se canceló el workflow inicial de `v1.0.3` para evitar publicar assets Linux.
+
 ## Actualización 2026-06-30: release 1.0.3
 
 - Versión preparada como `1.0.3` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
