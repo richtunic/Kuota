@@ -15,10 +15,11 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
+                position,
                 ..
             } = event
             {
-                toggle_popover(&tray.app_handle());
+                toggle_popover(&tray.app_handle(), Some((position.x, position.y)));
             }
         })
         .build(app)?;
@@ -26,7 +27,7 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn toggle_popover(app: &tauri::AppHandle) {
+fn toggle_popover(app: &tauri::AppHandle, tray_position: Option<(f64, f64)>) {
     let Some(window) = app.get_webview_window("popover") else {
         return;
     };
@@ -36,30 +37,57 @@ fn toggle_popover(app: &tauri::AppHandle) {
         return;
     }
 
-    position_near_tray(&window);
+    position_near_tray(&window, tray_position);
     let _ = window.show();
     let _ = window.set_focus();
 }
 
-fn position_near_tray(window: &tauri::WebviewWindow) {
-    let Ok(Some(monitor)) = window.primary_monitor() else {
-        return;
+fn position_near_tray(window: &tauri::WebviewWindow, tray_position: Option<(f64, f64)>) {
+    let monitor = match tray_position
+        .and_then(|(x, y)| window.monitor_from_point(x, y).ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten())
+    {
+        Some(monitor) => monitor,
+        None => return,
     };
 
-    let screen_size = monitor.size();
+    let work_area = monitor.work_area();
     let win_size = window
         .outer_size()
         .unwrap_or_else(|_| tauri::PhysicalSize::new(360, 520));
+    let margin = 8;
+
+    let Some((tray_x, _)) = tray_position else {
+        position_with_fallback(window, work_area, win_size, margin);
+        return;
+    };
+
+    let min_x = work_area.position.x + margin;
+    let max_x = work_area.position.x + work_area.size.width as i32 - win_size.width as i32 - margin;
+    let x = (tray_x.round() as i32 - win_size.width as i32 / 2).clamp(min_x, max_x.max(min_x));
 
     #[cfg(target_os = "macos")]
-    let position =
-        tauri::PhysicalPosition::new(screen_size.width as i32 - win_size.width as i32 - 10, 28);
+    let y = work_area.position.y + margin;
 
     #[cfg(not(target_os = "macos"))]
-    let position = tauri::PhysicalPosition::new(
-        screen_size.width as i32 - win_size.width as i32 - 10,
-        screen_size.height as i32 - win_size.height as i32 - 48,
-    );
+    let y = work_area.position.y + work_area.size.height as i32 - win_size.height as i32 - margin;
 
-    let _ = window.set_position(position);
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
+fn position_with_fallback(
+    window: &tauri::WebviewWindow,
+    work_area: &tauri::PhysicalRect<i32, u32>,
+    win_size: tauri::PhysicalSize<u32>,
+    margin: i32,
+) {
+    let x = work_area.position.x + work_area.size.width as i32 - win_size.width as i32 - margin;
+
+    #[cfg(target_os = "macos")]
+    let y = work_area.position.y + margin;
+
+    #[cfg(not(target_os = "macos"))]
+    let y = work_area.position.y + work_area.size.height as i32 - win_size.height as i32 - margin;
+
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }

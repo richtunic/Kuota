@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
+import type { DownloadEvent } from '@tauri-apps/plugin-updater'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AccountUsage, CodexAuthAccount, CodexAuthStatus, ConfiguredAccount } from '../types'
@@ -18,6 +19,7 @@ interface AppState {
   switchingAccountId: string | null
   bootstrappingCodexAuth: boolean
   checkingUpdates: boolean
+  updateDownloadProgress: number | null
   updatesUpToDate: boolean
   language: Language
 
@@ -117,6 +119,7 @@ export const useStore = create<AppState>()(
     switchingAccountId: null,
       bootstrappingCodexAuth: false,
       checkingUpdates: false,
+      updateDownloadProgress: null,
       updatesUpToDate: false,
       language: 'es',
 
@@ -228,7 +231,7 @@ export const useStore = create<AppState>()(
     },
 
     checkAllUpdates: async () => {
-        set({ checkingUpdates: true, bootstrappingCodexAuth: true, updatesUpToDate: false, error: null })
+        set({ checkingUpdates: true, updateDownloadProgress: null, bootstrappingCodexAuth: true, updatesUpToDate: false, error: null })
 
       try {
         const status = await invoke<CodexAuthStatus>('ensure_codex_auth')
@@ -241,14 +244,35 @@ export const useStore = create<AppState>()(
 
         const update = await check()
           if (update) {
-            await update.downloadAndInstall()
+            let downloaded = 0
+            let total: number | undefined
+            await update.downloadAndInstall((event: DownloadEvent) => {
+              if (event.event === 'Started') {
+                downloaded = 0
+                total = event.data.contentLength
+                set({ updateDownloadProgress: 0 })
+                return
+              }
+
+              if (event.event === 'Progress') {
+                downloaded += event.data.chunkLength
+                set((state) => ({
+                  updateDownloadProgress: total
+                    ? Math.min(99, Math.round((downloaded / total) * 100))
+                    : Math.min(95, (state.updateDownloadProgress ?? 0) + 3),
+                }))
+                return
+              }
+
+              set({ updateDownloadProgress: 100 })
+            })
             await relaunch()
           }
           set({ updatesUpToDate: true })
         } catch (error) {
           set({ error: humanizeUpdateError(error), updatesUpToDate: false })
         } finally {
-        set({ checkingUpdates: false, bootstrappingCodexAuth: false })
+        set({ checkingUpdates: false, updateDownloadProgress: null, bootstrappingCodexAuth: false })
       }
     },
 

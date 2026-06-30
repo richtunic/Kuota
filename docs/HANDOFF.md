@@ -1,5 +1,28 @@
 # HANDOFF
 
+## Actualización 2026-06-30: release 1.0.3
+
+- Versión preparada como `1.0.3` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
+- Incluye fixes de login interactivo en Windows, alineación del popover al icono del tray y barra de progreso real durante descarga de actualización.
+- El flujo esperado es commit en `main`, tag `v1.0.3` y push de branch/tag para que `.github/workflows/release.yml` publique los assets.
+
+## Actualización 2026-06-30: alineación del popover y progreso de updates
+
+- `src-tauri/src/tray.rs` ahora posiciona la ventana `popover` usando la coordenada real del click del tray y centra la ventana respecto al icono.
+- El posicionamiento se limita al `work_area` del monitor activo para evitar que la ventana se salga de pantalla; el fallback previo queda para eventos sin coordenadas.
+- `src/store/useStore.ts` captura eventos `Started`, `Progress` y `Finished` del updater de Tauri.
+- `src/App.tsx` muestra una barra compacta de progreso en Ajustes mientras se descarga una actualización.
+- Validado con `npm run build`, `cargo fmt` y `cargo check`.
+
+## Actualización 2026-06-30: login de nueva cuenta en Windows
+
+- Se corrigió el flujo de `Nueva cuenta` en Windows: `codex_auth_login` ahora abre `cmd.exe /K` con `CREATE_NEW_CONSOLE` para ejecutar `codex-auth login --device-auth`.
+- La invocación usa `call` para que el shim `.cmd` instalado por npm funcione correctamente dentro de `cmd.exe`.
+- El cambio evita que el flujo interactivo quede invisible al ejecutarse desde la app GUI de Tauri (`windows_subsystem = "windows"`).
+- Se conserva el `PATH` extendido para que el ejecutable global de npm (`codex-auth.cmd`) funcione desde la ventana abierta.
+- Validado con `npm run build`, `cargo fmt` y `cargo check` local.
+- El check cruzado `cargo check --target x86_64-pc-windows-msvc` sigue bloqueado en esta máquina por toolchain nativo faltante para `ring` (`assert.h`), antes de compilar la crate de Kuota.
+
 ## Actualización 2026-06-28: automatización de releases
 
 - `.github/workflows/release.yml` ahora genera notas de release desde los commits incluidos entre el tag anterior y el tag nuevo.

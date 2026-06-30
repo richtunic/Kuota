@@ -27,6 +27,7 @@ const copy = {
     prepare: 'Preparar codex-auth',
     preparing: 'Preparando...',
     checkUpdates: 'Buscar actualizaciones',
+    downloadingUpdate: 'Descargando actualización',
     upToDateBro: 'Ya tienes la versión más reciente bro',
     aboutKuota: 'Acerca de Kuota',
     manageAccounts: 'Eliminar cuentas',
@@ -71,6 +72,7 @@ const copy = {
     prepare: 'Prepare codex-auth',
     preparing: 'Preparing...',
     checkUpdates: 'Check for updates',
+    downloadingUpdate: 'Downloading update',
     upToDateBro: "You're on the latest version",
     aboutKuota: 'About Kuota',
     manageAccounts: 'Remove accounts',
@@ -105,6 +107,7 @@ export default function App() {
     switchingAccountId,
     bootstrappingCodexAuth,
     checkingUpdates,
+    updateDownloadProgress,
     updatesUpToDate,
     language,
     addAccount,
@@ -214,6 +217,7 @@ export default function App() {
           setLanguage={setLanguage}
           onDelete={deleteAccount}
           updateLabel={updateLabel}
+          updateProgress={updateDownloadProgress}
           updateDisabled={checkingUpdates || bootstrappingCodexAuth}
           onCheckUpdates={checkAllUpdates}
           onClose={() => setShowSettings(false)}
@@ -223,7 +227,7 @@ export default function App() {
       {showAbout && (
         <AboutModal
           t={t}
-          appVersion="1.0.2"
+          appVersion="1.0.3"
           codexAuthVersion={version}
           onClose={() => setShowAbout(false)}
         />
@@ -386,6 +390,7 @@ function SettingsModal({
   setLanguage,
   onDelete,
   updateLabel,
+  updateProgress,
   updateDisabled,
   onCheckUpdates,
   onClose,
@@ -396,6 +401,7 @@ function SettingsModal({
   setLanguage: (language: Language) => void
   onDelete: (id: string) => void
   updateLabel: string
+  updateProgress: number | null
   updateDisabled: boolean
   onCheckUpdates: () => void
   onClose: () => void
@@ -433,6 +439,17 @@ function SettingsModal({
           >
             {updateLabel}
           </button>
+          {updateProgress !== null && (
+            <div className="mt-2">
+              <div className="mb-1 flex items-center justify-between text-[10px] leading-3 text-[#8F8F8F]">
+                <span>{t.downloadingUpdate}</span>
+                <span>{Math.round(updateProgress)}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[#2B2B2B]">
+                <div className="h-full rounded-full bg-[#8AE234]" style={{ width: `${updateProgress}%` }} />
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="border-t border-[#242424] pt-2">

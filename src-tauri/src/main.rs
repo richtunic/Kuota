@@ -9,6 +9,8 @@ use std::process::Command;
 const CODEX_AUTH_PACKAGE: &str = "@loongphy/codex-auth";
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+#[cfg(target_os = "windows")]
+const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
 #[derive(Debug, Clone, Copy)]
 enum CodexTarget {
@@ -134,7 +136,26 @@ async fn codex_auth_login(device_auth: bool) -> Result<(), String> {
             })?;
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let mut login_command =
+            format!("call {} login", windows_cmd_quote(&path.to_string_lossy()));
+        if device_auth {
+            login_command.push_str(" --device-auth");
+        }
+        login_command.push_str(" & echo. & echo Cuando termine el login, vuelve a Kuota y presiona Actualizar cuentas.");
+
+        Command::new("cmd.exe")
+            .args(["/K", &login_command])
+            .env("PATH", extended_path())
+            .creation_flags(CREATE_NEW_CONSOLE)
+            .spawn()
+            .map_err(|error| format!("No se pudo abrir cmd para codex-auth login: {}", error))?;
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
         let mut command = std::process::Command::new(path);
         command.arg("login");
@@ -164,6 +185,11 @@ fn shell_quote(value: &str) -> String {
 
 fn apple_script_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_cmd_quote(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
 }
 
 #[cfg(target_os = "windows")]
