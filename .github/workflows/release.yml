@@ -33,7 +33,10 @@ jobs:
             echo "### Cambios"
           } > "${notes_file}"
 
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          explicit_notes="docs/releases/${current_ref}.md"
+          if [[ -f "${explicit_notes}" ]]; then
+            cat "${explicit_notes}" > "${notes_file}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             previous_tag="$(git describe --tags --abbrev=0 "${current_ref}^" 2>/dev/null || true)"
             if [[ -n "${previous_tag}" ]]; then
               git log --pretty=format:'- %s (%h)' "${previous_tag}..${current_ref}" >> "${notes_file}"
@@ -44,12 +47,14 @@ jobs:
             echo "- Build manual desde ${current_ref}." >> "${notes_file}"
           fi
 
-          {
-            echo
-            echo "### Assets"
-            echo "- Builds firmados para macOS y Windows."
-            echo "- Incluye latest.json para el actualizador automatico."
-          } >> "${notes_file}"
+          if [[ ! -f "${explicit_notes}" ]]; then
+            {
+              echo
+              echo "### Assets"
+              echo "- Builds firmados para macOS y Windows."
+              echo "- Incluye latest.json para el actualizador automatico."
+            } >> "${notes_file}"
+          fi
 
           {
             echo "release_body<<EOF"

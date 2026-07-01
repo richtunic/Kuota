@@ -1,6 +1,22 @@
 # CHANGELOG_AI
 
 Fecha: 2026-07-01
+Tarea: Corregir notas visibles de release 1.0.4
+Cambios:
+- Se actualizo la release publicada `v1.0.4` con notas funcionales y visibles para el usuario.
+- Se agrego `docs/releases/v1.0.4.md` como fuente explicita de notas de release.
+- El workflow de release ahora usa `docs/releases/<tag>.md` cuando existe, evitando depender solo de subjects de commits.
+Archivos:
+- `.github/workflows/release.yml`
+- `docs/releases/v1.0.4.md`
+- `docs/CHANGELOG_AI.md`
+Validación:
+- `gh release view v1.0.4` muestra los cambios principales, documentacion/reglas y assets.
+- `git diff --check` pasó.
+Notas:
+- Esta regla queda operativa: cada nueva version debe agregar notas explicitas si los commits no describen suficiente el cambio para usuarios.
+
+Fecha: 2026-07-01
 Tarea: Preparar release 1.0.4
 Cambios:
 - Version actualizada a `1.0.4` en package, Tauri, Cargo, lockfiles y modal Acerca de Kuota.
