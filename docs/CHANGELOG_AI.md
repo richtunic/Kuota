@@ -1,5 +1,29 @@
 # CHANGELOG_AI
 
+Fecha: 2026-07-01
+Tarea: Preparar release 1.0.4
+Cambios:
+- Version actualizada a `1.0.4` en package, Tauri, Cargo, lockfiles y modal Acerca de Kuota.
+- README documenta que macOS y Windows usan login nativo de Codex sin consola, con codigo copiado automaticamente al portapapeles.
+- README deja como regla que cada version nueva debe incluir commits descriptivos, cambios visibles en releases y builds solo para macOS/Windows hasta nuevo aviso.
+Archivos:
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+- `src/App.tsx`
+- `README.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/HANDOFF.md`
+- `docs/DECISIONS.md`
+Validación:
+- `npm run build` pasó.
+- `cargo check` pasó.
+- `git diff --check` pasó.
+Notas:
+- Linux permanece fuera de las compilaciones oficiales hasta nuevo aviso.
+
 Fecha: 2026-06-30
 Tarea: Diagnosticar error de codigo en version lanzada
 Cambios:

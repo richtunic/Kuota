@@ -247,7 +247,7 @@ export default function App() {
       {showAbout && (
         <AboutModal
           t={t}
-          appVersion="1.0.3"
+          appVersion="1.0.4"
           codexAuthVersion={version}
           onClose={() => setShowAbout(false)}
         />

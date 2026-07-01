@@ -58,7 +58,7 @@ Para agregar una cuenta, Kuota abre el flujo guiado de `codex-auth login --devic
 
 En macOS y Windows, el login se muestra dentro de Kuota: la app ejecuta `codex-auth` en segundo plano, detecta el codigo de dispositivo, lo copia automaticamente al portapapeles y abre la pagina de autorizacion de OpenAI en el navegador predeterminado. Si la copia automatica falla, el codigo queda visible para copiarlo manualmente.
 
-En macOS el codigo se copia con `pbcopy`; en Windows se usa el portapapeles del sistema mediante PowerShell oculto.
+En macOS el codigo se copia automaticamente con `pbcopy`; en Windows se usa el portapapeles del sistema mediante PowerShell oculto. En ambos sistemas el usuario no tiene que abrir CMD, PowerShell ni Terminal para agregar una cuenta.
 
 Al terminar la autorizacion, Kuota vuelve a consultar la lista de cuentas automaticamente.
 
@@ -166,6 +166,12 @@ cargo check
 ### Builds soportados
 
 Hasta nuevo aviso, las compilaciones y releases oficiales se generan solo para macOS y Windows. Linux queda fuera del workflow de release para no publicar builds sin validacion.
+
+### Reglas de release
+
+- Cada version nueva debe subir la version en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
+- Cada version nueva debe tener commits descriptivos y notas de cambios visibles en GitHub Releases.
+- Los builds oficiales se publican solo para macOS y Windows hasta nuevo aviso.
 
 ## Stack
 

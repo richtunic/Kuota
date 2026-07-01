@@ -1,5 +1,11 @@
 # DECISIONS
 
+Fecha: 2026-07-01
+Decisión: Publicar el login nativo macOS/Windows como release `1.0.4`.
+Motivo: El login oculto, la copia automatica del codigo y el manejo de errores de device auth son cambios visibles que deben llegar por autoupdate con version propia.
+Alternativas descartadas: Mantener `1.0.3`, porque dificultaria distinguir usuarios con el flujo anterior; publicar Linux, porque sigue sin validacion activa.
+Impacto: Se actualizan manifests, lockfiles, modal About y documentacion; el tag `v1.0.4` debe compilar solo macOS y Windows desde GitHub Actions.
+
 Fecha: 2026-06-30
 Decisión: Mantener releases solo para macOS y Windows y documentar cambios por version.
 Motivo: Linux queda sin validacion activa hasta nuevo aviso; cada version nueva debe explicar claramente cambios funcionales, fixes y nuevas funciones para que el usuario entienda que recibira.

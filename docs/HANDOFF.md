@@ -1,5 +1,12 @@
 # HANDOFF
 
+## Actualización 2026-07-01: release 1.0.4
+
+- Version preparada como `1.0.4` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
+- La release incluye el login nativo oculto de Codex para macOS y Windows, copia automatica del codigo al portapapeles, apertura del navegador del sistema y mensajes amigables cuando OpenAI limita temporalmente la generacion de codigos.
+- README documenta la funcion nueva en macOS/Windows y la regla de release: cambios visibles por version, commits descriptivos y builds oficiales solo para macOS/Windows.
+- El flujo esperado es commit en `main`, tag `v1.0.4` y push de branch/tag para que `.github/workflows/release.yml` publique assets macOS/Windows.
+
 ## Actualización 2026-06-30: login nativo oculto de Codex en Windows
 
 - El flujo de `Agregar cuenta` en Windows ya no abre `cmd.exe` ni PowerShell.
