@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent } from '@tauri-apps/plugin-updater'
@@ -7,6 +8,29 @@ import { persist } from 'zustand/middleware'
 import type { AccountUsage, CodexAuthAccount, CodexAuthStatus, ConfiguredAccount } from '../types'
 
 export type Language = 'es' | 'en'
+
+export interface CodexLoginState {
+  active: boolean
+  status: 'idle' | 'starting' | 'waiting' | 'browser-opened' | 'succeeded' | 'failed' | 'cancelled'
+  code: string | null
+  url: string | null
+  message: string | null
+}
+
+interface CodexLoginEvent {
+  event:
+    | 'LoginStarted'
+    | 'AuthorizationCodeDetected'
+    | 'AuthorizationUrlDetected'
+    | 'BrowserOpened'
+    | 'WaitingForAuthorization'
+    | 'LoginSucceeded'
+    | 'LoginFailed'
+    | 'LoginCancelled'
+  code?: string
+  url?: string
+  message?: string
+}
 
 interface AppState {
   accounts: ConfiguredAccount[]
@@ -21,6 +45,7 @@ interface AppState {
   checkingUpdates: boolean
   updateDownloadProgress: number | null
   updatesUpToDate: boolean
+  codexLogin: CodexLoginState
   language: Language
 
   addAccount: (account: Omit<ConfiguredAccount, 'id'>) => void
@@ -29,6 +54,9 @@ interface AppState {
   setLanguage: (language: Language) => void
   switchAccount: (account: ConfiguredAccount) => Promise<void>
   loginAccount: () => Promise<void>
+  cancelLoginAccount: () => Promise<void>
+  openLoginAuthorizationUrl: () => Promise<void>
+  dismissLoginAccount: () => void
   refreshCodexAuth: () => Promise<void>
   ensureCodexAuth: () => Promise<void>
   checkAllUpdates: () => Promise<void>
@@ -38,6 +66,9 @@ interface AppState {
 }
 
 let initialized = false
+const isWindows = () => /win/i.test(navigator.platform)
+const isMac = () => /mac/i.test(navigator.platform)
+const hasNativeLoginModal = () => isWindows() || isMac()
 
 function mergeAccounts(
   configured: ConfiguredAccount[],
@@ -106,6 +137,129 @@ function humanizeUpdateError(error: unknown): string {
   return message
 }
 
+function humanizeLoginError(error: unknown): string {
+  const message = String(error)
+  if (/codex-auth no esta instalado/i.test(message)) {
+    return 'codex-auth no esta instalado. Prepara codex-auth e intenta de nuevo.'
+  }
+  if (/codex cli|`codex`|codex executable/i.test(message)) {
+    return 'Codex CLI no esta instalado. Kuota intentara prepararlo automaticamente.'
+  }
+  if (/node\.js|node/i.test(message)) {
+    return 'Node.js no esta disponible para ejecutar codex-auth.'
+  }
+  return 'No se pudo completar el login de Codex.'
+}
+
+function handleCodexLoginEvent(
+  event: CodexLoginEvent,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  get: () => AppState,
+) {
+  if (event.event === 'LoginStarted') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        status: 'starting',
+        message: 'Iniciando login seguro...',
+      },
+    }))
+    return
+  }
+
+  if (event.event === 'WaitingForAuthorization') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        status: 'waiting',
+        message: 'Esperando autorizacion...',
+      },
+    }))
+    return
+  }
+
+  if (event.event === 'AuthorizationCodeDetected') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        code: event.code ?? state.codexLogin.code,
+        status: 'waiting',
+        message: event.message ?? 'Esperando confirmacion...',
+      },
+    }))
+    return
+  }
+
+  if (event.event === 'AuthorizationUrlDetected') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        url: event.url ?? state.codexLogin.url,
+        status: 'waiting',
+        message: 'Abriendo OpenAI...',
+      },
+    }))
+    return
+  }
+
+  if (event.event === 'BrowserOpened') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        url: event.url ?? state.codexLogin.url,
+        status: 'browser-opened',
+        message: 'Esperando confirmacion...',
+      },
+    }))
+    return
+  }
+
+  if (event.event === 'LoginSucceeded') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        status: 'succeeded',
+        message: event.message ?? 'Cuenta agregada correctamente.',
+      },
+    }))
+    get().refreshCodexAuth()
+    window.setTimeout(() => {
+      get().dismissLoginAccount()
+      get().refreshCodexAuth()
+    }, 1800)
+    return
+  }
+
+  if (event.event === 'LoginCancelled') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: false,
+        status: 'cancelled',
+        message: event.message ?? 'Login cancelado.',
+      },
+    }))
+    return
+  }
+
+  if (event.event === 'LoginFailed') {
+    set((state) => ({
+      codexLogin: {
+        ...state.codexLogin,
+        active: true,
+        status: 'failed',
+        message: event.message ?? 'No se pudo completar el login de Codex.',
+      },
+    }))
+  }
+}
+
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -121,6 +275,13 @@ export const useStore = create<AppState>()(
       checkingUpdates: false,
       updateDownloadProgress: null,
       updatesUpToDate: false,
+      codexLogin: {
+        active: false,
+        status: 'idle',
+        code: null,
+        url: null,
+        message: null,
+      },
       language: 'es',
 
       addAccount: (account) => {
@@ -191,12 +352,89 @@ export const useStore = create<AppState>()(
 
       loginAccount: async () => {
         set({ error: null })
+        if (hasNativeLoginModal()) {
+          set({
+            codexLogin: {
+              active: true,
+              status: 'starting',
+              code: null,
+              url: null,
+              message: 'Iniciando login seguro...',
+            },
+          })
+        }
         try {
           await invoke('codex_auth_login', { deviceAuth: true })
-          scheduleLoginRefreshes(get().refreshCodexAuth)
+          if (!hasNativeLoginModal()) {
+            scheduleLoginRefreshes(get().refreshCodexAuth)
+          }
         } catch (error) {
+          if (hasNativeLoginModal()) {
+            set({
+              codexLogin: {
+                active: true,
+                status: 'failed',
+                code: null,
+                url: null,
+                message: humanizeLoginError(error),
+              },
+            })
+            return
+          }
           set({ error: String(error) })
         }
+      },
+
+      cancelLoginAccount: async () => {
+        set({
+          codexLogin: {
+            active: false,
+            status: 'cancelled',
+            code: null,
+            url: null,
+            message: null,
+          },
+        })
+        try {
+          await invoke('cancel_codex_auth_login')
+        } catch (error) {
+          set((state) => ({
+            codexLogin: {
+              ...state.codexLogin,
+              status: 'failed',
+              message: humanizeLoginError(error),
+            },
+          }))
+        }
+      },
+
+      openLoginAuthorizationUrl: async () => {
+        const url = get().codexLogin.url
+        if (!url) return
+
+        try {
+          await invoke('codex_auth_open_authorization_url', { url })
+        } catch (error) {
+          set((state) => ({
+            codexLogin: {
+              ...state.codexLogin,
+              status: 'failed',
+              message: humanizeLoginError(error),
+            },
+          }))
+        }
+      },
+
+      dismissLoginAccount: () => {
+        set({
+          codexLogin: {
+            active: false,
+            status: 'idle',
+            code: null,
+            url: null,
+            message: null,
+          },
+        })
       },
 
       refreshCodexAuth: async () => {
@@ -296,6 +534,12 @@ export const useStore = create<AppState>()(
         get().ensureCodexAuth()
         if (initialized) return
         initialized = true
+
+        if (hasNativeLoginModal()) {
+          listen<CodexLoginEvent>('codex-login-event', ({ payload }) => {
+            handleCodexLoginEvent(payload, set, get)
+          }).catch((error) => set({ error: String(error) }))
+        }
 
         window.setInterval(() => {
           get().refreshCodexAuth()

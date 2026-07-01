@@ -56,7 +56,11 @@ Desde `Ajustes` tambien se puede buscar actualizaciones. Si hay una version nuev
 
 Para agregar una cuenta, Kuota abre el flujo guiado de `codex-auth login --device-auth`.
 
-En macOS, el login se abre en Terminal para que el usuario pueda autorizar la sesion con el codigo de dispositivo. Al terminar, Kuota vuelve a consultar la lista de cuentas.
+En macOS y Windows, el login se muestra dentro de Kuota: la app ejecuta `codex-auth` en segundo plano, detecta el codigo de dispositivo, lo copia automaticamente al portapapeles y abre la pagina de autorizacion de OpenAI en el navegador predeterminado. Si la copia automatica falla, el codigo queda visible para copiarlo manualmente.
+
+En macOS el codigo se copia con `pbcopy`; en Windows se usa el portapapeles del sistema mediante PowerShell oculto.
+
+Al terminar la autorizacion, Kuota vuelve a consultar la lista de cuentas automaticamente.
 
 ### 3. Ver cuotas
 
@@ -158,6 +162,10 @@ npx tsc --noEmit
 cd src-tauri
 cargo check
 ```
+
+### Builds soportados
+
+Hasta nuevo aviso, las compilaciones y releases oficiales se generan solo para macOS y Windows. Linux queda fuera del workflow de release para no publicar builds sin validacion.
 
 ## Stack
 

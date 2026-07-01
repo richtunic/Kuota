@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AccountForm } from './components/AccountForm'
-import { useStore, type Language } from './store/useStore'
+import { useStore, type CodexLoginState, type Language } from './store/useStore'
 import codexLogo from './assets/codex-logo.png'
 import type { AccountUsage, ConfiguredAccount } from './types'
 
@@ -21,6 +21,14 @@ const copy = {
     current: 'Cuenta activa en Codex',
     switching: 'Cambiando...',
     useInCodex: 'Usar en Codex',
+    connectAccount: 'Conectar cuenta',
+    waitingAuthorization: 'Esperando autorización...',
+    waitingConfirmation: 'Esperando confirmación...',
+    authorizationCode: 'Código de autorización',
+    copyCode: 'Copiar código',
+    copiedCode: 'Código copiado',
+    openOpenAI: 'Abrir OpenAI',
+    retry: 'Reintentar',
     noAccounts: 'Sin cuentas Codex',
     noAccountsHelp: 'Agrega una cuenta con el login guiado de codex-auth.',
     addAccount: 'Agregar cuenta',
@@ -66,6 +74,14 @@ const copy = {
     current: 'Current Codex Account',
     switching: 'Switching...',
     useInCodex: 'Use in Codex',
+    connectAccount: 'Connect account',
+    waitingAuthorization: 'Waiting for authorization...',
+    waitingConfirmation: 'Waiting for confirmation...',
+    authorizationCode: 'Authorization code',
+    copyCode: 'Copy code',
+    copiedCode: 'Code copied',
+    openOpenAI: 'Open OpenAI',
+    retry: 'Retry',
     noAccounts: 'No Codex accounts',
     noAccountsHelp: 'Add one with the guided codex-auth login.',
     addAccount: 'Add Account',
@@ -103,6 +119,7 @@ export default function App() {
     activeAccountId,
     codexAuth,
     error,
+    codexLogin,
     lastSync,
     switchingAccountId,
     bootstrappingCodexAuth,
@@ -115,6 +132,9 @@ export default function App() {
     setLanguage,
     switchAccount,
     loginAccount,
+    cancelLoginAccount,
+    openLoginAuthorizationUrl,
+    dismissLoginAccount,
     ensureCodexAuth,
     checkAllUpdates,
     quitApp,
@@ -237,6 +257,19 @@ export default function App() {
         <AccountForm
           onSave={handleSave}
           onClose={() => setShowForm(false)}
+        />
+      )}
+
+      {codexLogin.active && (
+        <CodexLoginModal
+          t={t}
+          code={codexLogin.code}
+          url={codexLogin.url}
+          status={codexLogin.status}
+          message={codexLogin.message}
+          onOpen={openLoginAuthorizationUrl}
+          onRetry={loginAccount}
+          onClose={codexLogin.status === 'succeeded' ? dismissLoginAccount : cancelLoginAccount}
         />
       )}
     </div>
@@ -500,6 +533,93 @@ function AboutModal({
           {t.developedBy}
         </div>
         <div className="text-[11px] leading-4 text-[#8F8F8F]">{t.basedOn}</div>
+      </div>
+    </Modal>
+  )
+}
+
+function CodexLoginModal({
+  t,
+  code,
+  url,
+  status,
+  message,
+  onOpen,
+  onRetry,
+  onClose,
+}: {
+  t: Record<string, string>
+  code: string | null
+  url: string | null
+  status: CodexLoginState['status']
+  message: string | null
+  onOpen: () => void
+  onRetry: () => void
+  onClose: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const waiting = status === 'starting' || status === 'waiting' || status === 'browser-opened'
+  const succeeded = status === 'succeeded'
+  const failed = status === 'failed'
+
+  async function copyCode() {
+    if (!code) return
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+
+  return (
+    <Modal title={t.connectAccount} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 rounded-md border border-[#303030] bg-[#101010] px-3 py-2">
+          {waiting && <span className="h-3 w-3 animate-spin rounded-full border border-[#5DDFC6] border-t-transparent" />}
+          {succeeded && <span className="h-2.5 w-2.5 rounded-full bg-[#8AE234]" />}
+          {failed && <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B7A]" />}
+          <span className="text-[12px] leading-4 text-[#E8E8E8]">
+            {message ?? (waiting ? t.waitingAuthorization : t.waitingConfirmation)}
+          </span>
+        </div>
+
+        <section>
+          <div className="mb-1 text-[10px] leading-3 text-[#8F8F8F]">{t.authorizationCode}</div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 min-w-0 flex-1 items-center rounded-md border border-[#303030] bg-[#0B0B0C] px-3 font-mono text-[17px] tracking-[0.08em] text-white">
+              <span className="truncate">{code ?? '--------'}</span>
+            </div>
+            <button
+              onClick={copyCode}
+              disabled={!code}
+              className="h-10 rounded-md bg-[#E8E8E8] px-3 text-[12px] font-medium text-[#111111] hover:bg-white disabled:bg-[#303030] disabled:text-[#777777]"
+            >
+              {copied ? t.copiedCode : t.copyCode}
+            </button>
+          </div>
+        </section>
+
+        <button
+          onClick={onOpen}
+          disabled={!url}
+          className="h-9 w-full rounded-md border border-[#303030] bg-[#1D1D1D] text-[12px] text-[#D6D6D6] hover:bg-[#242424] disabled:text-[#777777]"
+        >
+          {t.openOpenAI}
+        </button>
+
+        {waiting && (
+          <div className="flex items-center gap-2 text-[11px] leading-4 text-[#8F8F8F]">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-[#5DDFC6]" />
+            {t.waitingConfirmation}
+          </div>
+        )}
+
+        {failed && (
+          <button
+            onClick={onRetry}
+            className="h-9 w-full rounded-md bg-[#E8E8E8] text-[12px] font-medium text-[#111111] hover:bg-white"
+          >
+            {t.retry}
+          </button>
+        )}
       </div>
     </Modal>
   )

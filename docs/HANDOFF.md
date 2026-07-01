@@ -1,10 +1,33 @@
 # HANDOFF
 
+## Actualización 2026-06-30: login nativo oculto de Codex en Windows
+
+- El flujo de `Agregar cuenta` en Windows ya no abre `cmd.exe` ni PowerShell.
+- `src-tauri/src/windows_codex_login.rs` encapsula `WindowsCodexLoginService`: inicia `codex-auth login --device-auth` con `CREATE_NO_WINDOW`, captura stdout/stderr, detecta URL/codigo, abre el navegador del sistema y cancela el proceso hijo si se cierra el modal.
+- La deteccion de codigo usa contexto: cuando stdout menciona device/authorization/one-time code, las siguientes lineas aceptan formatos flexibles con guion, underscore, mayusculas/minusculas o digitos, sin longitud fija.
+- El codigo de device auth se copia automaticamente al portapapeles antes de abrir OpenAI; si la copia falla, el navegador no se abre automaticamente y el modal permite copia manual.
+- La X del modal oculta la ventana de inmediato y luego invoca `cancel_codex_auth_login` para no dejar el proceso hijo vivo.
+- Cuando `codex-auth` viene como shim de npm, el servicio resuelve el script real del paquete y lo ejecuta con `node.exe` para evitar depender de una consola.
+- `src/store/useStore.ts` escucha eventos `codex-login-event` solo en Windows y refresca cuentas/cuota al recibir `LoginSucceeded`.
+- `src/App.tsx` muestra un modal nativo con codigo, copiar, abrir OpenAI, estado de espera, exito y reintento.
+- macOS conserva el flujo anterior con Terminal.
+- Validado con `npm run build`, `cargo fmt` y `cargo check`.
+- El check cruzado `cargo check --target aarch64-pc-windows-msvc` queda bloqueado en macOS por toolchain C/MSVC faltante en `ring` (`assert.h`), antes de compilar la crate de Kuota; probar build final dentro del Windows 11 ARM de UTM.
+
+## Actualización 2026-06-30: login nativo oculto de Codex en macOS
+
+- macOS ahora usa `src-tauri/src/mac_codex_login.rs` en vez de abrir Terminal para `codex-auth login --device-auth`.
+- El servicio macOS ejecuta `codex-auth` como proceso hijo oculto, captura stdout/stderr, detecta URL/codigo, copia con `pbcopy`, abre OpenAI con `open` y cancela el proceso si se cierra el modal.
+- La UI activa el mismo modal nativo para Windows y macOS mediante `hasNativeLoginModal()`.
+- El formato observado en Terminal para macOS es estable: URL `https://auth.openai.com/codex/device` y codigo despues de `Enter this one-time code`.
+- Validado con `npm run build`, `cargo fmt` y `cargo check` sin warnings.
+
 ## Actualización 2026-06-30: releases solo macOS y Windows
 
 - `.github/workflows/release.yml` deja fuera `ubuntu-22.04` del matrix hasta nuevo aviso.
 - Las notas generadas por el workflow ahora anuncian builds para macOS y Windows.
 - Se canceló el workflow inicial de `v1.0.3` para evitar publicar assets Linux.
+- Regla vigente: hasta nuevo aviso no compilar ni publicar Linux; cada version nueva debe ir con commits descriptivos y notas de cambios visibles para el usuario.
 
 ## Actualización 2026-06-30: release 1.0.3
 
@@ -91,13 +114,17 @@ Actualización final de enfoque: se eliminó el proxy del flujo principal. La ap
 - Frontend ya no muestra ni controla proxy.
 - Backend ya no expone comandos `start_proxy`, `stop_proxy`, `proxy_status`, `read_usage` ni `set_system_proxy`.
 - Al iniciar, la UI llama `ensure_codex_auth`: instala `@loongphy/codex-auth@latest` si falta y lo actualiza automáticamente si npm reporta una versión distinta.
+- En Windows, el mismo preflight también verifica `codex` e instala `@openai/codex@latest` si falta, porque `codex-auth login --device-auth` depende del ejecutable `codex`.
+- En Windows, `extended_path()` agrega el `bin` vendor de `@openai/codex` (`codex.exe`) además del shim npm, porque `codex-auth` no detecto el shim `codex.cmd` en la prueba UTM.
+- Al lanzar procesos hijos en Windows se escriben ambas claves, `PATH` y `Path`, con el mismo valor extendido para evitar diferencias entre Node y binarios nativos.
+- El login de nueva cuenta en Windows corre mediante `WindowsCodexLoginService`: proceso oculto, stdout/stderr capturados, deteccion de URL/codigo, apertura del navegador del sistema y cancelacion del hijo si se cierra la ventana.
 - `codex-auth list` es la fuente de cuentas y uso; se parsean `plan`, `5H USAGE`, `WEEKLY USAGE` y `LAST ACTIVITY`.
 - `Usar en Codex` ejecuta `codex-auth switch <email|alias>`, reinicia/abre Codex y refresca la lista. Importante: `codex-auth switch <query>` no acepta `--skip-api`; ese flag solo aplica al switch interactivo.
 - Antes del switch, Tauri detecta si se estaba usando Codex Desktop o CLI:
   - Si Desktop estaba corriendo, ejecuta el switch, cierra `Codex.app`, espera brevemente y vuelve a abrir `Codex.app`.
   - Si no detecta Desktop pero detecta CLI, ejecuta el switch y abre una Terminal nueva con `codex`.
   - Si no detecta nada, abre Codex Desktop por defecto.
-- `Nueva cuenta` ejecuta `codex-auth login --device-auth` en una Terminal guiada en macOS, porque `codex-auth login` es interactivo; al terminar, el usuario vuelve a la app y presiona `Actualizar cuentas`.
+- `Nueva cuenta` ejecuta `codex-auth login --device-auth` en una Terminal guiada en macOS, porque no se modifico ese flujo; en Windows usa el servicio oculto y actualiza cuentas automaticamente al terminar.
 - Después de iniciar `Nueva cuenta`, la app agenda refrescos automáticos de `codex-auth list` al momento, 5s, 15s y 45s.
 - La app también refresca `codex-auth list` cada 60s y cuando la ventana vuelve a tener foco/visibilidad.
 - El formulario manual quedó reducido a nombre, email/alias, color y notas; ya no pide navegador/perfil.

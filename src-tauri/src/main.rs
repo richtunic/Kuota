@@ -1,6 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "macos")]
+mod mac_codex_login;
 mod tray;
+#[cfg(target_os = "windows")]
+mod windows_codex_login;
 
 use serde::Serialize;
 use std::path::PathBuf;
@@ -8,9 +12,9 @@ use std::process::Command;
 
 const CODEX_AUTH_PACKAGE: &str = "@loongphy/codex-auth";
 #[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+const CODEX_CLI_PACKAGE: &str = "@openai/codex";
 #[cfg(target_os = "windows")]
-const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Debug, Clone, Copy)]
 enum CodexTarget {
@@ -72,6 +76,8 @@ fn main() {
             codex_auth_status,
             ensure_codex_auth,
             codex_auth_login,
+            cancel_codex_auth_login,
+            codex_auth_open_authorization_url,
             switch_codex_account,
             open_codex,
             quit_app,
@@ -83,6 +89,9 @@ fn main() {
 #[tauri::command]
 async fn ensure_codex_auth() -> Result<CodexAuthStatus, String> {
     let latest = npm_latest_codex_auth_version().ok();
+
+    #[cfg(target_os = "windows")]
+    ensure_windows_codex_runtime()?;
 
     if locate_codex_auth().is_none() {
         install_or_update_codex_auth()?;
@@ -112,47 +121,28 @@ async fn switch_codex_account(selector: String) -> Result<CodexAuthStatus, Strin
 }
 
 #[tauri::command]
-async fn codex_auth_login(device_auth: bool) -> Result<(), String> {
+async fn codex_auth_login(app: tauri::AppHandle, device_auth: bool) -> Result<(), String> {
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    let _ = &app;
+
+    #[cfg(target_os = "windows")]
+    ensure_windows_codex_runtime()?;
+
+    if locate_codex_auth().is_none() {
+        install_or_update_codex_auth()?;
+    }
     let path = locate_codex_auth().ok_or_else(|| "codex-auth no esta instalado".to_string())?;
 
     #[cfg(target_os = "macos")]
     {
-        let mut command = format!("{} login", shell_quote(&path.to_string_lossy()));
-        if device_auth {
-            command.push_str(" --device-auth");
-        }
-        command.push_str("; echo ''; echo 'Cuando termine el login, vuelve a Codex Account Router y presiona Actualizar cuentas.'");
-
-        let script = format!(
-            "tell application \"Terminal\"\ndo script {}\nactivate\nend tell",
-            apple_script_string(&command)
-        );
-
-        std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .status()
-            .map_err(|error| {
-                format!("No se pudo abrir Terminal para codex-auth login: {}", error)
-            })?;
+        let _ = path;
+        mac_codex_login::MacCodexLoginService::start(app, device_auth)?;
     }
 
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-
-        let mut login_command =
-            format!("call {} login", windows_cmd_quote(&path.to_string_lossy()));
-        if device_auth {
-            login_command.push_str(" --device-auth");
-        }
-        login_command.push_str(" & echo. & echo Cuando termine el login, vuelve a Kuota y presiona Actualizar cuentas.");
-
-        Command::new("cmd.exe")
-            .args(["/K", &login_command])
-            .env("PATH", extended_path())
-            .creation_flags(CREATE_NEW_CONSOLE)
-            .spawn()
-            .map_err(|error| format!("No se pudo abrir cmd para codex-auth login: {}", error))?;
+        let _ = path;
+        windows_codex_login::WindowsCodexLoginService::start(app, device_auth)?;
     }
 
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
@@ -169,6 +159,44 @@ async fn codex_auth_login(device_auth: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn cancel_codex_auth_login(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return mac_codex_login::MacCodexLoginService::cancel(app);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return windows_codex_login::WindowsCodexLoginService::cancel(app);
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+#[tauri::command]
+async fn codex_auth_open_authorization_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return mac_codex_login::MacCodexLoginService::open_authorization_url(url);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return windows_codex_login::WindowsCodexLoginService::open_authorization_url(url);
+    }
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = url;
+        Ok(())
+    }
+}
+
+#[tauri::command]
 async fn open_codex() -> Result<(), String> {
     restart_codex_target(CodexTarget::Desktop);
     Ok(())
@@ -179,21 +207,12 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
 fn apple_script_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 #[cfg(target_os = "windows")]
-fn windows_cmd_quote(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "\"\""))
-}
-
-#[cfg(target_os = "windows")]
-fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+pub(crate) fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     let mut command = Command::new(program);
     use std::os::windows::process::CommandExt;
     command.creation_flags(CREATE_NO_WINDOW);
@@ -201,7 +220,7 @@ fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+pub(crate) fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     let command = Command::new(program);
     command
 }
@@ -244,12 +263,7 @@ fn read_codex_auth_status(latest_version: Option<String>) -> CodexAuthStatus {
 }
 
 fn install_or_update_codex_auth() -> Result<(), String> {
-    let npm = locate_command("npm")
-        .ok_or_else(|| "npm no esta instalado o no esta en PATH".to_string())?;
-    let output = hidden_command(npm)
-        .args(["install", "-g", "@loongphy/codex-auth@latest"])
-        .env("PATH", extended_path())
-        .output()
+    let output = npm_output(&["install", "-g", &format!("{}@latest", CODEX_AUTH_PACKAGE)])
         .map_err(|error| format!("No se pudo instalar {}: {}", CODEX_AUTH_PACKAGE, error))?;
 
     if output.status.success() {
@@ -261,10 +275,50 @@ fn install_or_update_codex_auth() -> Result<(), String> {
     Err(if stderr.is_empty() { stdout } else { stderr })
 }
 
+#[cfg(target_os = "windows")]
+fn ensure_windows_codex_runtime() -> Result<(), String> {
+    if locate_command("npm").is_none() {
+        return Err("npm no esta instalado o no esta en PATH".to_string());
+    }
+
+    if locate_codex_cli().is_none() {
+        install_or_update_codex_cli()?;
+    }
+    if windows_codex_native_bin_dir().is_none() {
+        return Err("Codex CLI se instalo, pero no se encontro el ejecutable nativo.".to_string());
+    }
+
+    if locate_codex_auth().is_none() {
+        install_or_update_codex_auth()?;
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn install_or_update_codex_cli() -> Result<(), String> {
+    let output = npm_output(&["install", "-g", &format!("{}@latest", CODEX_CLI_PACKAGE)])
+        .map_err(|error| format!("No se pudo instalar {}: {}", CODEX_CLI_PACKAGE, error))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Err(if stderr.is_empty() { stdout } else { stderr })
+}
+
 fn npm_latest_codex_auth_version() -> Result<String, String> {
-    let npm = locate_command("npm")
-        .ok_or_else(|| "npm no esta instalado o no esta en PATH".to_string())?;
-    run_command(npm, &["view", CODEX_AUTH_PACKAGE, "version"])
+    let output = npm_output(&["view", CODEX_AUTH_PACKAGE, "version"])?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    if output.status.success() {
+        Ok(if stdout.is_empty() { stderr } else { stdout })
+    } else {
+        Err(if stderr.is_empty() { stdout } else { stderr })
+    }
 }
 
 fn installed_codex_auth_version() -> Option<String> {
@@ -272,11 +326,60 @@ fn installed_codex_auth_version() -> Option<String> {
     run_command(path, &["--version"]).ok()
 }
 
-fn locate_codex_auth() -> Option<PathBuf> {
+pub(crate) fn locate_codex_auth() -> Option<PathBuf> {
     locate_command("codex-auth")
 }
 
-fn locate_command(command: &str) -> Option<PathBuf> {
+#[cfg(target_os = "windows")]
+fn locate_codex_cli() -> Option<PathBuf> {
+    locate_command("codex")
+}
+
+#[cfg(target_os = "windows")]
+fn windows_codex_native_bin_dir() -> Option<PathBuf> {
+    let (platform_package, target_triple) = windows_codex_platform_package()?;
+    let mut roots = Vec::new();
+
+    if let Some(path) = locate_codex_cli() {
+        if let Some(prefix) = path.parent() {
+            roots.push(prefix.to_path_buf());
+        }
+    }
+
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        roots.push(PathBuf::from(appdata).join("npm"));
+    }
+
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        roots.push(PathBuf::from(program_files).join("nodejs"));
+    }
+
+    roots
+        .into_iter()
+        .map(|root| {
+            root.join("node_modules")
+                .join("@openai")
+                .join("codex")
+                .join("node_modules")
+                .join("@openai")
+                .join(platform_package)
+                .join("vendor")
+                .join(target_triple)
+                .join("bin")
+        })
+        .find(|bin_dir| bin_dir.join("codex.exe").exists())
+}
+
+#[cfg(target_os = "windows")]
+fn windows_codex_platform_package() -> Option<(&'static str, &'static str)> {
+    match std::env::consts::ARCH {
+        "x86_64" => Some(("codex-win32-x64", "x86_64-pc-windows-msvc")),
+        "aarch64" => Some(("codex-win32-arm64", "aarch64-pc-windows-msvc")),
+        _ => None,
+    }
+}
+
+pub(crate) fn locate_command(command: &str) -> Option<PathBuf> {
     let mut candidates = Vec::new();
     let command_names = command_variants(command);
 
@@ -336,9 +439,10 @@ fn command_variants(command: &str) -> Vec<String> {
 }
 
 fn run_command(path: PathBuf, args: &[&str]) -> Result<String, String> {
-    let output = hidden_command(path)
-        .args(args)
-        .env("PATH", extended_path())
+    let mut command = hidden_command(path);
+    command.args(args);
+    apply_extended_path(&mut command);
+    let output = command
         .output()
         .map_err(|error| format!("No se pudo ejecutar comando: {}", error))?;
 
@@ -350,6 +454,87 @@ fn run_command(path: PathBuf, args: &[&str]) -> Result<String, String> {
     } else {
         Err(if stderr.is_empty() { stdout } else { stderr })
     }
+}
+
+fn npm_output(args: &[&str]) -> Result<std::process::Output, String> {
+    let npm = locate_command("npm")
+        .ok_or_else(|| "npm no esta instalado o no esta en PATH".to_string())?;
+    let mut command = npm_command(npm)?;
+    command.args(args);
+    apply_extended_path(&mut command);
+    command
+        .output()
+        .map_err(|error| format!("No se pudo ejecutar npm: {}", error))
+}
+
+fn npm_command(npm: PathBuf) -> Result<Command, String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some((node, script)) = resolve_npm_cli(&npm) {
+            let mut command = hidden_command(node);
+            command.arg(script);
+            return Ok(command);
+        }
+    }
+
+    Ok(hidden_command(npm))
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_npm_cli(npm: &std::path::Path) -> Option<(PathBuf, PathBuf)> {
+    let node = locate_node_exe()?;
+    let mut candidates = Vec::new();
+
+    if let Some(prefix) = npm.parent() {
+        candidates.push(
+            prefix
+                .join("node_modules")
+                .join("npm")
+                .join("bin")
+                .join("npm-cli.js"),
+        );
+    }
+
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        candidates.push(
+            PathBuf::from(program_files)
+                .join("nodejs")
+                .join("node_modules")
+                .join("npm")
+                .join("bin")
+                .join("npm-cli.js"),
+        );
+    }
+
+    candidates
+        .into_iter()
+        .find(|script| script.exists())
+        .map(|script| (node, script))
+}
+
+#[cfg(target_os = "windows")]
+fn locate_node_exe() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            candidates.push(dir.join("node.exe"));
+        }
+    }
+
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        candidates.push(PathBuf::from(program_files).join("nodejs").join("node.exe"));
+    }
+
+    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+        candidates.push(
+            PathBuf::from(program_files_x86)
+                .join("nodejs")
+                .join("node.exe"),
+        );
+    }
+
+    candidates.into_iter().find(|path| path.exists())
 }
 
 fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
@@ -422,7 +607,7 @@ fn normalize_version(version: &str) -> String {
         .to_string()
 }
 
-fn extended_path() -> String {
+pub(crate) fn extended_path() -> String {
     let mut parts: Vec<PathBuf> = Vec::new();
     if let Ok(path) = std::env::var("PATH") {
         parts.extend(std::env::split_paths(&path));
@@ -437,6 +622,11 @@ fn extended_path() -> String {
         parts.push(PathBuf::from(appdata).join("npm"));
     }
 
+    #[cfg(target_os = "windows")]
+    if let Some(codex_bin_dir) = windows_codex_native_bin_dir() {
+        parts.push(codex_bin_dir);
+    }
+
     parts.push(PathBuf::from("/opt/homebrew/bin"));
     parts.push(PathBuf::from("/usr/local/bin"));
     parts.push(PathBuf::from("/usr/bin"));
@@ -444,6 +634,13 @@ fn extended_path() -> String {
     std::env::join_paths(parts)
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_default()
+}
+
+pub(crate) fn apply_extended_path(command: &mut Command) {
+    let path = extended_path();
+    command.env("PATH", &path);
+    #[cfg(target_os = "windows")]
+    command.env("Path", &path);
 }
 
 fn detect_codex_target() -> CodexTarget {
