@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { check } from '@tauri-apps/plugin-updater'
+import { check, type Update } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent } from '@tauri-apps/plugin-updater'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -15,6 +15,13 @@ export interface CodexLoginState {
   code: string | null
   url: string | null
   message: string | null
+}
+
+export interface PendingAppUpdate {
+  version: string
+  currentVersion: string
+  date?: string
+  body?: string
 }
 
 interface CodexLoginEvent {
@@ -45,6 +52,7 @@ interface AppState {
   checkingUpdates: boolean
   updateDownloadProgress: number | null
   updatesUpToDate: boolean
+  pendingAppUpdate: PendingAppUpdate | null
   codexLogin: CodexLoginState
   language: Language
 
@@ -60,12 +68,16 @@ interface AppState {
   refreshCodexAuth: () => Promise<void>
   ensureCodexAuth: () => Promise<void>
   checkAllUpdates: () => Promise<void>
+  checkForAppUpdate: (silent?: boolean) => Promise<void>
+  installPendingAppUpdate: () => Promise<void>
+  dismissPendingAppUpdate: () => void
   openCodex: () => Promise<void>
   quitApp: () => Promise<void>
   init: () => void
 }
 
 let initialized = false
+let pendingTauriUpdate: Update | null = null
 const isWindows = () => /win/i.test(navigator.platform)
 const isMac = () => /mac/i.test(navigator.platform)
 const hasNativeLoginModal = () => isWindows() || isMac()
@@ -275,6 +287,7 @@ export const useStore = create<AppState>()(
       checkingUpdates: false,
       updateDownloadProgress: null,
       updatesUpToDate: false,
+      pendingAppUpdate: null,
       codexLogin: {
         active: false,
         status: 'idle',
@@ -480,39 +493,94 @@ export const useStore = create<AppState>()(
           mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
         }))
 
-        const update = await check()
-          if (update) {
-            let downloaded = 0
-            let total: number | undefined
-            await update.downloadAndInstall((event: DownloadEvent) => {
-              if (event.event === 'Started') {
-                downloaded = 0
-                total = event.data.contentLength
-                set({ updateDownloadProgress: 0 })
-                return
-              }
-
-              if (event.event === 'Progress') {
-                downloaded += event.data.chunkLength
-                set((state) => ({
-                  updateDownloadProgress: total
-                    ? Math.min(99, Math.round((downloaded / total) * 100))
-                    : Math.min(95, (state.updateDownloadProgress ?? 0) + 3),
-                }))
-                return
-              }
-
-              set({ updateDownloadProgress: 100 })
-            })
-            await relaunch()
-          }
-          set({ updatesUpToDate: true })
+          await get().checkForAppUpdate(false)
         } catch (error) {
           set({ error: humanizeUpdateError(error), updatesUpToDate: false })
         } finally {
         set({ checkingUpdates: false, updateDownloadProgress: null, bootstrappingCodexAuth: false })
       }
     },
+
+      checkForAppUpdate: async (silent = false) => {
+        if (!silent) {
+          set({ checkingUpdates: true, updateDownloadProgress: null, updatesUpToDate: false, error: null })
+        }
+
+        try {
+          const update = await check()
+          if (update) {
+            pendingTauriUpdate = update
+            set({
+              pendingAppUpdate: {
+                version: update.version,
+                currentVersion: update.currentVersion,
+                date: update.date,
+                body: update.body,
+              },
+              updatesUpToDate: false,
+            })
+            return
+          }
+
+          pendingTauriUpdate = null
+          set({ pendingAppUpdate: null, updatesUpToDate: !silent })
+        } catch (error) {
+          if (!silent) {
+            set({ error: humanizeUpdateError(error), updatesUpToDate: false })
+          }
+        } finally {
+          if (!silent) {
+            set({ checkingUpdates: false, updateDownloadProgress: null })
+          }
+        }
+      },
+
+      installPendingAppUpdate: async () => {
+        set({ checkingUpdates: true, updateDownloadProgress: 0, error: null })
+        try {
+          const update = pendingTauriUpdate ?? (await check())
+          if (!update) {
+            pendingTauriUpdate = null
+            set({ pendingAppUpdate: null, updatesUpToDate: true })
+            return
+          }
+
+          pendingTauriUpdate = update
+          let downloaded = 0
+          let total: number | undefined
+          await update.downloadAndInstall((event: DownloadEvent) => {
+            if (event.event === 'Started') {
+              downloaded = 0
+              total = event.data.contentLength
+              set({ updateDownloadProgress: 0 })
+              return
+            }
+
+            if (event.event === 'Progress') {
+              downloaded += event.data.chunkLength
+              set((state) => ({
+                updateDownloadProgress: total
+                  ? Math.min(99, Math.round((downloaded / total) * 100))
+                  : Math.min(95, (state.updateDownloadProgress ?? 0) + 3),
+              }))
+              return
+            }
+
+            set({ updateDownloadProgress: 100 })
+          })
+          await relaunch()
+        } catch (error) {
+          set({ error: humanizeUpdateError(error), updatesUpToDate: false })
+        } finally {
+          set({ checkingUpdates: false, updateDownloadProgress: null })
+        }
+      },
+
+      dismissPendingAppUpdate: () => {
+        pendingTauriUpdate?.close().catch(() => undefined)
+        pendingTauriUpdate = null
+        set({ pendingAppUpdate: null })
+      },
 
     openCodex: async () => {
       try {
@@ -534,6 +602,10 @@ export const useStore = create<AppState>()(
         get().ensureCodexAuth()
         if (initialized) return
         initialized = true
+
+        window.setTimeout(() => {
+          get().checkForAppUpdate(true)
+        }, 1_500)
 
         if (hasNativeLoginModal()) {
           listen<CodexLoginEvent>('codex-login-event', ({ payload }) => {

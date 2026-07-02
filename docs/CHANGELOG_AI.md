@@ -1,6 +1,130 @@
 # CHANGELOG_AI
 
 Fecha: 2026-07-01
+Tarea: Preparar release 1.0.5
+Cambios:
+- Version actualizada a `1.0.5` en manifests de npm, Tauri, Cargo y modal Acerca de Kuota.
+- Se confirma que `docs/releases/v1.0.5.md` contiene cambios visibles en español e ingles para GitHub Releases.
+- La release mantiene builds oficiales solo para macOS y Windows.
+Archivos:
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+- `src/App.tsx`
+- `docs/releases/v1.0.5.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` pasó.
+- `cargo check` pasó.
+- `git diff --check` pasó.
+Notas:
+- No se agregan dependencias nuevas.
+
+Fecha: 2026-07-01
+Tarea: Reiniciar Codex automaticamente en Windows despues de switch
+Cambios:
+- Despues de `codex-auth switch`, Windows detecta si `Codex.exe` estaba corriendo y lo trata como destino Desktop.
+- `restart_codex_desktop` en Windows captura la ruta real del `Codex.exe` en ejecucion antes de cerrarlo.
+- Luego cierra `Codex.exe` con `taskkill` oculto, espera a que desaparezca del proceso y vuelve a abrir esa misma ruta.
+- El relanzamiento solo se considera exitoso si `Codex.exe` vuelve a aparecer en `tasklist`; si no, intenta `Start-Process` con PowerShell oculto y despues `explorer.exe` como fallback.
+- Antes de relanzar deja un margen breve despues de que el proceso anterior desaparece para evitar choques con locks de instancia.
+- Si no puede recuperar la ruta del proceso, intenta rutas comunes de instalacion.
+- Si no encuentra Codex Desktop, intenta abrir Codex CLI como fallback usando el `PATH` extendido.
+- El flujo evita `cmd.exe` y no abre ventanas intermedias de consola.
+Archivos:
+- `src-tauri/src/main.rs`
+- `docs/CHANGELOG_AI.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` pasó.
+- `cargo fmt` pasó.
+- `cargo check` pasó.
+- `git diff --check` pasó.
+Notas:
+- La deteccion de Desktop en Windows depende de que el proceso se llame `Codex.exe`; la ruta se obtiene desde WMI/CIM mediante PowerShell oculto.
+
+Fecha: 2026-07-01
+Tarea: Documentar regla permanente de releases bilingues y retirar Linux del README
+Cambios:
+- README ya no describe comportamiento de Linux como soportado.
+- README aclara que Linux no esta soportado ni publicado oficialmente hasta nuevo aviso.
+- README y AUTOUPDATE registran como regla permanente que GitHub Releases debe mostrar cambios en español e ingles.
+- DECISIONS registra que la app solo debe mostrar el bloque del idioma configurado por el usuario.
+Archivos:
+- `README.md`
+- `docs/AUTOUPDATE.md`
+- `docs/DECISIONS.md`
+- `docs/CHANGELOG_AI.md`
+Validación:
+- `git diff --check` pasó.
+Notas:
+- La regla tecnica usa `docs/releases/<tag>.md` con `<!-- kuota:es -->` y `<!-- kuota:en -->`.
+
+Fecha: 2026-07-01
+Tarea: Agregar dialogo localizado de actualizaciones de Kuota
+Cambios:
+- La app revisa GitHub Releases mediante Tauri Updater y muestra un dialogo si existe una nueva version.
+- El dialogo permite actualizar ahora u omitir por el momento; la descarga/instalacion ya no ocurre automaticamente al detectar la update.
+- El dialogo muestra version actual, nueva version y cambios de release en el idioma activo de Kuota.
+- Se agrego parser de release notes con marcadores `<!-- kuota:es -->` y `<!-- kuota:en -->`.
+- Se creo `docs/releases/v1.0.5.md` con notas bilingues para la proxima release.
+Archivos:
+- `src/store/useStore.ts`
+- `src/App.tsx`
+- `docs/releases/v1.0.5.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/HANDOFF.md`
+- `docs/AUTOUPDATE.md`
+Validación:
+- `npm run build` pasó.
+- `cargo check` pasó.
+- `git diff --check` pasó.
+Notas:
+- Se reutiliza el updater firmado de Tauri; no se agrega dependencia ni cliente paralelo para GitHub API.
+
+Fecha: 2026-07-01
+Tarea: Agregar invitacion Ko-fi en Ajustes y Acerca de
+Cambios:
+- Ajustes y Acerca de Kuota muestran una leyenda localizada sobre los Rokaccinos del Caffenio.
+- Se agrego boton localizado de Ko-fi: `Invitarle un Rokaccino` en espanol y `Treat him to a Rokaccino` en ingles.
+- El boton abre `https://ko-fi.com/O4L621U2AQ` con el navegador del sistema usando el plugin shell de Tauri.
+- Se evito el widget remoto con script para no ejecutar JavaScript de terceros dentro de Tauri.
+Archivos:
+- `src/App.tsx`
+- `docs/CHANGELOG_AI.md`
+Validación:
+- `npm run build` pasó.
+- `cargo check` pasó.
+- `git diff --check` pasó.
+Notas:
+- El enlace apunta a `https://ko-fi.com/O4L621U2AQ`.
+
+Fecha: 2026-07-01
+Tarea: Corregir switch de cuenta en Windows sin depender de CMD
+Cambios:
+- `switch_codex_account` ahora ejecuta `codex-auth switch` mediante el launcher seguro de `codex-auth` en Windows.
+- El launcher compartido resuelve shims npm de `codex-auth` a `node.exe <script>` para evitar depender de `.cmd`, `cmd.exe` o una consola visible.
+- `codex-auth --version`, `status`, `list` y `switch` usan el mismo camino de ejecucion, reduciendo diferencias entre login y switch.
+- `WindowsCodexLoginService` reutiliza el launcher compartido en vez de mantener una copia local.
+- La busqueda de comandos en Windows ahora prefiere `.exe` antes de `.cmd` cuando ambos existen.
+Archivos:
+- `src-tauri/src/main.rs`
+- `src-tauri/src/windows_codex_login.rs`
+- `docs/CHANGELOG_AI.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` pasó.
+- `cargo fmt` pasó.
+- `cargo check` pasó.
+- En UTM Windows ARM, `cargo check` queda bloqueado antes de compilar Kuota porque `ring` no encuentra `clang`/toolchain C (`EXIT_101`).
+Notas:
+- No se registran tokens ni stdout completo; el cambio solo modifica la forma de ejecutar el comando local.
+- Politica vigente: evitar CMD/PowerShell visibles en Windows. PowerShell solo queda permitido como proceso oculto y no interactivo para tareas nativas puntuales como copiar al portapapeles.
+
+Fecha: 2026-07-01
 Tarea: Corregir notas visibles de release 1.0.4
 Cambios:
 - Se actualizo la release publicada `v1.0.4` con notas funcionales y visibles para el usuario.

@@ -1,11 +1,8 @@
 #![cfg(target_os = "windows")]
 
 use serde::Serialize;
-use serde_json::Value;
 use std::{
-    fs,
     io::{BufRead, BufReader},
-    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
     thread,
@@ -13,9 +10,7 @@ use std::{
 };
 use tauri::{AppHandle, Emitter};
 
-use crate::{
-    apply_extended_path, hidden_command, locate_codex_auth, locate_command, CREATE_NO_WINDOW,
-};
+use crate::{apply_extended_path, hidden_command, resolve_codex_auth_launcher, CREATE_NO_WINDOW};
 
 const LOGIN_EVENT: &str = "codex-login-event";
 
@@ -196,118 +191,6 @@ impl WindowsCodexLoginService {
     pub fn open_authorization_url(url: String) -> Result<(), String> {
         open_url(&url)
     }
-}
-
-struct CodexAuthLauncher {
-    program: PathBuf,
-    args: Vec<PathBuf>,
-}
-
-fn resolve_codex_auth_launcher() -> Result<CodexAuthLauncher, String> {
-    let path = locate_codex_auth().ok_or_else(|| "codex-auth no esta instalado".to_string())?;
-
-    if path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| extension.eq_ignore_ascii_case("exe"))
-        .unwrap_or(false)
-    {
-        return Ok(CodexAuthLauncher {
-            program: path,
-            args: vec![],
-        });
-    }
-
-    let node = locate_node_exe()
-        .ok_or_else(|| "Node.js no esta instalado o no esta en PATH.".to_string())?;
-    let script = locate_codex_auth_script(&path)
-        .ok_or_else(|| "No se pudo resolver codex-auth sin abrir consola.".to_string())?;
-
-    Ok(CodexAuthLauncher {
-        program: node,
-        args: vec![script],
-    })
-}
-
-fn locate_node_exe() -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-
-    if let Ok(path) = std::env::var("PATH") {
-        for dir in std::env::split_paths(&path) {
-            candidates.push(dir.join("node.exe"));
-        }
-    }
-
-    if let Ok(program_files) = std::env::var("ProgramFiles") {
-        candidates.push(PathBuf::from(program_files).join("nodejs").join("node.exe"));
-    }
-
-    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-        candidates.push(
-            PathBuf::from(program_files_x86)
-                .join("nodejs")
-                .join("node.exe"),
-        );
-    }
-
-    candidates.into_iter().find(|path| path.exists())
-}
-
-fn locate_codex_auth_script(command_path: &Path) -> Option<PathBuf> {
-    let mut package_roots = Vec::new();
-
-    if let Some(prefix) = command_path.parent() {
-        package_roots.push(
-            prefix
-                .join("node_modules")
-                .join("@loongphy")
-                .join("codex-auth"),
-        );
-    }
-
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        package_roots.push(
-            PathBuf::from(appdata)
-                .join("npm")
-                .join("node_modules")
-                .join("@loongphy")
-                .join("codex-auth"),
-        );
-    }
-
-    let mut npm_root_command = hidden_command(locate_command("npm")?);
-    npm_root_command.args(["root", "-g"]);
-    apply_extended_path(&mut npm_root_command);
-    if let Ok(output) = npm_root_command.output() {
-        if output.status.success() {
-            let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !root.is_empty() {
-                package_roots.push(PathBuf::from(root).join("@loongphy").join("codex-auth"));
-            }
-        }
-    }
-
-    package_roots
-        .into_iter()
-        .find_map(|root| read_codex_auth_bin(&root))
-}
-
-fn read_codex_auth_bin(package_root: &Path) -> Option<PathBuf> {
-    let package_json = package_root.join("package.json");
-    let content = fs::read_to_string(package_json).ok()?;
-    let json = serde_json::from_str::<Value>(&content).ok()?;
-    let bin = json.get("bin")?;
-
-    let bin_path = if let Some(path) = bin.as_str() {
-        path
-    } else {
-        bin.get("codex-auth")
-            .or_else(|| bin.as_object().and_then(|object| object.values().next()))?
-            .as_str()?
-    };
-
-    let script = package_root.join(bin_path);
-    script.exists().then_some(script)
 }
 
 fn read_output<R>(app: AppHandle, detection: Arc<Mutex<DetectionState>>, reader: R)

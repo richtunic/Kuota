@@ -113,9 +113,8 @@ async fn codex_auth_status() -> CodexAuthStatus {
 
 #[tauri::command]
 async fn switch_codex_account(selector: String) -> Result<CodexAuthStatus, String> {
-    let path = locate_codex_auth().ok_or_else(|| "codex-auth no esta instalado".to_string())?;
     let target = detect_codex_target();
-    run_command(path, &["switch", selector.as_str()])?;
+    run_codex_auth_command(&["switch", selector.as_str()])?;
     restart_codex_target(target);
     Ok(read_codex_auth_status(npm_latest_codex_auth_version().ok()))
 }
@@ -239,9 +238,9 @@ fn read_codex_auth_status(latest_version: Option<String>) -> CodexAuthStatus {
         };
     };
 
-    let version = run_command(path.clone(), &["--version"]).ok();
-    let status = run_command(path.clone(), &["status"]).ok();
-    let accounts = run_command(path.clone(), &["list"])
+    let version = run_codex_auth_command(&["--version"]).ok();
+    let status = run_codex_auth_command(&["status"]).ok();
+    let accounts = run_codex_auth_command(&["list"])
         .map(|output| parse_codex_auth_accounts(&output))
         .unwrap_or_default();
 
@@ -322,12 +321,103 @@ fn npm_latest_codex_auth_version() -> Result<String, String> {
 }
 
 fn installed_codex_auth_version() -> Option<String> {
-    let path = locate_codex_auth()?;
-    run_command(path, &["--version"]).ok()
+    run_codex_auth_command(&["--version"]).ok()
 }
 
 pub(crate) fn locate_codex_auth() -> Option<PathBuf> {
     locate_command("codex-auth")
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) struct CodexAuthLauncher {
+    pub(crate) program: PathBuf,
+    pub(crate) args: Vec<PathBuf>,
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn resolve_codex_auth_launcher() -> Result<CodexAuthLauncher, String> {
+    let path = locate_codex_auth().ok_or_else(|| "codex-auth no esta instalado".to_string())?;
+
+    if path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("exe"))
+        .unwrap_or(false)
+    {
+        return Ok(CodexAuthLauncher {
+            program: path,
+            args: vec![],
+        });
+    }
+
+    let node = locate_node_exe()
+        .ok_or_else(|| "Node.js no esta instalado o no esta en PATH.".to_string())?;
+    let script = locate_codex_auth_script(&path)
+        .ok_or_else(|| "No se pudo resolver codex-auth sin abrir consola.".to_string())?;
+
+    Ok(CodexAuthLauncher {
+        program: node,
+        args: vec![script],
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn locate_codex_auth_script(command_path: &std::path::Path) -> Option<PathBuf> {
+    let mut package_roots = Vec::new();
+
+    if let Some(prefix) = command_path.parent() {
+        package_roots.push(
+            prefix
+                .join("node_modules")
+                .join("@loongphy")
+                .join("codex-auth"),
+        );
+    }
+
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        package_roots.push(
+            PathBuf::from(appdata)
+                .join("npm")
+                .join("node_modules")
+                .join("@loongphy")
+                .join("codex-auth"),
+        );
+    }
+
+    let mut npm_root_command = npm_command(locate_command("npm")?).ok()?;
+    npm_root_command.args(["root", "-g"]);
+    apply_extended_path(&mut npm_root_command);
+    if let Ok(output) = npm_root_command.output() {
+        if output.status.success() {
+            let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !root.is_empty() {
+                package_roots.push(PathBuf::from(root).join("@loongphy").join("codex-auth"));
+            }
+        }
+    }
+
+    package_roots
+        .into_iter()
+        .find_map(|root| read_codex_auth_bin(&root))
+}
+
+#[cfg(target_os = "windows")]
+fn read_codex_auth_bin(package_root: &std::path::Path) -> Option<PathBuf> {
+    let package_json = package_root.join("package.json");
+    let content = std::fs::read_to_string(package_json).ok()?;
+    let json = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+    let bin = json.get("bin")?;
+
+    let bin_path = if let Some(path) = bin.as_str() {
+        path
+    } else {
+        bin.get("codex-auth")
+            .or_else(|| bin.as_object().and_then(|object| object.values().next()))?
+            .as_str()?
+    };
+
+    let script = package_root.join(bin_path);
+    script.exists().then_some(script)
 }
 
 #[cfg(target_os = "windows")]
@@ -426,8 +516,8 @@ fn command_variants(command: &str) -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
         vec![
-            format!("{}.cmd", command),
             format!("{}.exe", command),
+            format!("{}.cmd", command),
             command.to_string(),
         ]
     }
@@ -441,6 +531,27 @@ fn command_variants(command: &str) -> Vec<String> {
 fn run_command(path: PathBuf, args: &[&str]) -> Result<String, String> {
     let mut command = hidden_command(path);
     command.args(args);
+    run_prepared_command(command)
+}
+
+fn run_codex_auth_command(args: &[&str]) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let launcher = resolve_codex_auth_launcher()?;
+        let mut command = hidden_command(launcher.program);
+        command.args(launcher.args);
+        command.args(args);
+        return run_prepared_command(command);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let path = locate_codex_auth().ok_or_else(|| "codex-auth no esta instalado".to_string())?;
+        run_command(path, args)
+    }
+}
+
+fn run_prepared_command(mut command: Command) -> Result<String, String> {
     apply_extended_path(&mut command);
     let output = command
         .output()
@@ -667,6 +778,16 @@ fn detect_codex_target() -> CodexTarget {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        if windows_process_running("Codex.exe") {
+            return CodexTarget::Desktop;
+        }
+        if windows_process_running("codex.exe") {
+            return CodexTarget::Cli;
+        }
+    }
+
     CodexTarget::None
 }
 
@@ -694,6 +815,24 @@ fn restart_codex_desktop() {
         std::thread::sleep(std::time::Duration::from_millis(800));
         let _ = hidden_command("open").args(["-a", "Codex"]).spawn();
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        let running_executable = running_windows_codex_desktop_path();
+        let _ = hidden_command("taskkill")
+            .args(["/IM", "Codex.exe", "/F"])
+            .status();
+        wait_for_windows_process_exit("Codex.exe", 2400);
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        if running_executable
+            .and_then(|path| open_windows_executable(path).ok())
+            .is_none()
+            && open_windows_codex_desktop().is_err()
+        {
+            let _ = open_windows_codex_cli();
+        }
+    }
 }
 
 fn open_codex_cli() {
@@ -706,6 +845,169 @@ fn open_codex_cli() {
         );
         let _ = hidden_command("osascript").args(["-e", &script]).status();
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = open_windows_codex_cli();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_process_running(image_name: &str) -> bool {
+    hidden_command("tasklist")
+        .args(["/FI", &format!("IMAGENAME eq {}", image_name), "/NH"])
+        .output()
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .to_lowercase()
+                .contains(&image_name.to_lowercase())
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_windows_process_exit(image_name: &str, timeout_ms: u64) {
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_millis(timeout_ms) {
+        if !windows_process_running(image_name) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_windows_process_start(image_name: &str, timeout_ms: u64) -> bool {
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_millis(timeout_ms) {
+        if windows_process_running(image_name) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    false
+}
+
+#[cfg(target_os = "windows")]
+fn running_windows_codex_desktop_path() -> Option<PathBuf> {
+    let output = hidden_command("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$p = Get-CimInstance Win32_Process -Filter \"Name = 'Codex.exe'\" | Select-Object -First 1 -ExpandProperty ExecutablePath; if ($p) { Write-Output $p }",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(path);
+    path.exists().then_some(path)
+}
+
+#[cfg(target_os = "windows")]
+fn open_windows_executable(executable: PathBuf) -> Result<(), String> {
+    let parent = executable.parent().map(|path| path.to_path_buf());
+    let executable_arg = executable.to_string_lossy().to_string();
+    let working_dir_arg = parent
+        .as_deref()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .to_string_lossy()
+        .to_string();
+
+    let mut direct = hidden_command(&executable);
+    if let Some(parent) = &parent {
+        direct.current_dir(parent);
+    }
+    let direct_result = direct.spawn();
+    if direct_result.is_ok() && wait_for_windows_process_start("Codex.exe", 3000) {
+        return Ok(());
+    }
+
+    let mut powershell = hidden_command("powershell.exe");
+    powershell.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Start-Process -FilePath $args[0] -WorkingDirectory $args[1]",
+        &executable_arg,
+        &working_dir_arg,
+    ]);
+    let powershell_result = powershell.status();
+    if powershell_result
+        .map(|status| status.success())
+        .unwrap_or(false)
+        && wait_for_windows_process_start("Codex.exe", 4000)
+    {
+        return Ok(());
+    }
+
+    let explorer_result = hidden_command("explorer.exe").arg(&executable_arg).status();
+    if explorer_result
+        .map(|status| status.success())
+        .unwrap_or(false)
+        && wait_for_windows_process_start("Codex.exe", 5000)
+    {
+        return Ok(());
+    }
+
+    Err(format!(
+        "No se pudo abrir Codex Desktop desde {}",
+        executable.to_string_lossy()
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn open_windows_codex_desktop() -> Result<(), String> {
+    let executable = locate_windows_codex_desktop()
+        .ok_or_else(|| "No se encontro Codex Desktop para reiniciarlo.".to_string())?;
+    open_windows_executable(executable)
+}
+
+#[cfg(target_os = "windows")]
+fn locate_windows_codex_desktop() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        let root = PathBuf::from(local_app_data);
+        candidates.push(root.join("Programs").join("Codex").join("Codex.exe"));
+        candidates.push(root.join("Programs").join("codex").join("Codex.exe"));
+        candidates.push(root.join("Codex").join("Codex.exe"));
+        candidates.push(root.join("OpenAI").join("Codex").join("Codex.exe"));
+    }
+
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        let root = PathBuf::from(program_files);
+        candidates.push(root.join("Codex").join("Codex.exe"));
+        candidates.push(root.join("OpenAI").join("Codex").join("Codex.exe"));
+    }
+
+    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+        let root = PathBuf::from(program_files_x86);
+        candidates.push(root.join("Codex").join("Codex.exe"));
+        candidates.push(root.join("OpenAI").join("Codex").join("Codex.exe"));
+    }
+
+    candidates.into_iter().find(|path| path.exists())
+}
+
+#[cfg(target_os = "windows")]
+fn open_windows_codex_cli() -> Result<(), String> {
+    let codex = locate_codex_cli().ok_or_else(|| "Codex CLI no esta instalado.".to_string())?;
+    let mut command = hidden_command(codex);
+    apply_extended_path(&mut command);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("No se pudo abrir Codex CLI: {}", error))
 }
 
 #[cfg(target_os = "macos")]

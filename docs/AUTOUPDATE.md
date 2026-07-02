@@ -89,8 +89,31 @@ Al presionar `Buscar actualizaciones` en Kuota:
 1. Kuota actualiza/verifica `codex-auth`.
 2. Kuota consulta el updater de Tauri.
 3. Si hay una version nueva de Kuota:
-   - descarga el paquete firmado;
-   - lo instala;
-   - relanza la app.
+   - muestra un dialogo con la version actual, la version nueva y los cambios;
+   - muestra los cambios en el idioma activo de la app cuando la release incluye bloques `<!-- kuota:es -->` y `<!-- kuota:en -->`;
+   - permite actualizar ahora u omitir por el momento;
+   - solo al confirmar, descarga el paquete firmado, lo instala y relanza la app.
 
 Si el endpoint o la llave publica no estuvieran configurados, Kuota muestra un mensaje controlado indicando que el actualizador esta pendiente de configurar.
+
+## Regla permanente de notas bilingues
+
+Cada release publicada en GitHub debe incluir cambios visibles en español e ingles. Para que la app muestre solo el idioma activo del usuario, usar este formato en `docs/releases/<tag>.md`:
+
+```md
+## Kuota vX.Y.Z
+
+<!-- kuota:es -->
+
+### Cambios principales
+
+- Cambio visible para usuarios en español.
+
+<!-- kuota:en -->
+
+### Main Changes
+
+- User-facing change in English.
+```
+
+GitHub Releases debe publicar ambos bloques. La app solo debe renderizar el bloque que coincida con el idioma configurado por el usuario.

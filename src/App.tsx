@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { open } from '@tauri-apps/plugin-shell'
 import { AccountForm } from './components/AccountForm'
-import { useStore, type CodexLoginState, type Language } from './store/useStore'
+import { useStore, type CodexLoginState, type Language, type PendingAppUpdate } from './store/useStore'
 import codexLogo from './assets/codex-logo.png'
 import type { AccountUsage, ConfiguredAccount } from './types'
 
@@ -36,6 +37,14 @@ const copy = {
     preparing: 'Preparando...',
     checkUpdates: 'Buscar actualizaciones',
     downloadingUpdate: 'Descargando actualización',
+    updateAvailableTitle: 'Nueva versión disponible',
+    updateAvailableLead: 'Hay una nueva versión de Kuota disponible.',
+    releaseChanges: 'Cambios',
+    currentVersion: 'Versión actual',
+    newVersion: 'Nueva versión',
+    installUpdate: 'Actualizar ahora',
+    skipForNow: 'Omitir por ahora',
+    noReleaseNotes: 'Esta versión incluye mejoras y correcciones. Revisa GitHub Releases para más detalles.',
     upToDateBro: 'Ya tienes la versión más reciente bro',
     aboutKuota: 'Acerca de Kuota',
     manageAccounts: 'Eliminar cuentas',
@@ -57,6 +66,8 @@ const copy = {
     developedBy: 'Desarrollado por RichTunic en GitHub',
     basedOn: 'Basado en Codex-Auth de terminal',
     codexAuthEngine: 'Motor',
+    rokaccinoPitch: 'Al desarrollador de Kuota le encantan los Rokaccinos del Caffenio. ¿Por qué no le invitas uno?',
+    kofiButton: 'Invitarle un Rokaccino',
   },
   en: {
     updated: 'Updated',
@@ -89,6 +100,14 @@ const copy = {
     preparing: 'Preparing...',
     checkUpdates: 'Check for updates',
     downloadingUpdate: 'Downloading update',
+    updateAvailableTitle: 'New version available',
+    updateAvailableLead: 'A new Kuota version is available.',
+    releaseChanges: 'Changes',
+    currentVersion: 'Current version',
+    newVersion: 'New version',
+    installUpdate: 'Update now',
+    skipForNow: 'Skip for now',
+    noReleaseNotes: 'This version includes improvements and fixes. Check GitHub Releases for more details.',
     upToDateBro: "You're on the latest version",
     aboutKuota: 'About Kuota',
     manageAccounts: 'Remove accounts',
@@ -110,8 +129,12 @@ const copy = {
     developedBy: 'Developed by RichTunic on GitHub',
     basedOn: 'Based on terminal Codex-Auth',
     codexAuthEngine: 'Engine',
+    rokaccinoPitch: "Kuota's developer loves Caffenio Rokaccinos. Why not buy him one?",
+    kofiButton: 'Treat him to a Rokaccino',
   },
 } satisfies Record<Language, Record<string, string>>
+
+const KOFI_URL = 'https://ko-fi.com/O4L621U2AQ'
 
 export default function App() {
   const {
@@ -126,6 +149,7 @@ export default function App() {
     checkingUpdates,
     updateDownloadProgress,
     updatesUpToDate,
+    pendingAppUpdate,
     language,
     addAccount,
     deleteAccount,
@@ -137,6 +161,8 @@ export default function App() {
     dismissLoginAccount,
     ensureCodexAuth,
     checkAllUpdates,
+    installPendingAppUpdate,
+    dismissPendingAppUpdate,
     quitApp,
     init,
   } = useStore()
@@ -247,7 +273,7 @@ export default function App() {
       {showAbout && (
         <AboutModal
           t={t}
-          appVersion="1.0.4"
+          appVersion="1.0.5"
           codexAuthVersion={version}
           onClose={() => setShowAbout(false)}
         />
@@ -270,6 +296,18 @@ export default function App() {
           onOpen={openLoginAuthorizationUrl}
           onRetry={loginAccount}
           onClose={codexLogin.status === 'succeeded' ? dismissLoginAccount : cancelLoginAccount}
+        />
+      )}
+
+      {pendingAppUpdate && (
+        <AppUpdateModal
+          t={t}
+          language={language}
+          update={pendingAppUpdate}
+          progress={updateDownloadProgress}
+          installing={checkingUpdates && updateDownloadProgress !== null}
+          onInstall={installPendingAppUpdate}
+          onSkip={dismissPendingAppUpdate}
         />
       )}
     </div>
@@ -508,6 +546,7 @@ function SettingsModal({
           </div>
         </section>
 
+        <RokaccinoSupport t={t} />
       </div>
     </Modal>
   )
@@ -533,9 +572,133 @@ function AboutModal({
           {t.developedBy}
         </div>
         <div className="text-[11px] leading-4 text-[#8F8F8F]">{t.basedOn}</div>
+        <RokaccinoSupport t={t} />
       </div>
     </Modal>
   )
+}
+
+function RokaccinoSupport({ t }: { t: Record<string, string> }) {
+  async function openKofi() {
+    await open(KOFI_URL)
+  }
+
+  return (
+    <section className="border-t border-[#242424] pt-2">
+      <p className="mb-2 text-[11px] leading-4 text-[#A8A8A8]">{t.rokaccinoPitch}</p>
+      <button
+        type="button"
+        onClick={openKofi}
+        className="flex h-9 w-full items-center justify-center rounded-md bg-[#31445e] px-3 text-center text-[12px] font-medium text-white hover:bg-[#3b5270]"
+      >
+        {t.kofiButton}
+      </button>
+    </section>
+  )
+}
+
+function AppUpdateModal({
+  t,
+  language,
+  update,
+  progress,
+  installing,
+  onInstall,
+  onSkip,
+}: {
+  t: Record<string, string>
+  language: Language
+  update: PendingAppUpdate
+  progress: number | null
+  installing: boolean
+  onInstall: () => void
+  onSkip: () => void
+}) {
+  const notes = localizedReleaseNotes(update.body, language, t.noReleaseNotes)
+
+  return (
+    <Modal title={t.updateAvailableTitle} onClose={installing ? () => undefined : onSkip}>
+      <div className="space-y-3">
+        <div className="rounded-md border border-[#303030] bg-[#101010] px-3 py-2">
+          <div className="text-[12px] leading-4 text-[#E8E8E8]">{t.updateAvailableLead}</div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] leading-3 text-[#8F8F8F]">
+            <div>
+              <div>{t.currentVersion}</div>
+              <div className="mt-0.5 text-[12px] text-[#D6D6D6]">{update.currentVersion}</div>
+            </div>
+            <div>
+              <div>{t.newVersion}</div>
+              <div className="mt-0.5 text-[12px] text-white">{update.version}</div>
+            </div>
+          </div>
+        </div>
+
+        <section>
+          <div className="mb-1.5 text-[10px] leading-3 text-[#8F8F8F]">{t.releaseChanges}</div>
+          <div className="max-h-[150px] overflow-y-auto rounded-md border border-[#303030] bg-[#0B0B0C] px-3 py-2 text-[11px] leading-4 text-[#D6D6D6]">
+            {notes.map((note, index) => (
+              <p key={`${note}-${index}`} className={index === 0 ? '' : 'mt-1.5'}>
+                {note}
+              </p>
+            ))}
+          </div>
+        </section>
+
+        {progress !== null && (
+          <div>
+            <div className="mb-1 flex items-center justify-between text-[10px] leading-3 text-[#8F8F8F]">
+              <span>{t.downloadingUpdate}</span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[#2B2B2B]">
+              <div className="h-full rounded-full bg-[#8AE234]" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onSkip}
+            disabled={installing}
+            className="h-9 rounded-md border border-[#303030] bg-[#1D1D1D] text-[12px] text-[#D6D6D6] hover:bg-[#242424] disabled:text-[#777777]"
+          >
+            {t.skipForNow}
+          </button>
+          <button
+            onClick={onInstall}
+            disabled={installing}
+            className="h-9 rounded-md bg-[#E8E8E8] text-[12px] font-medium text-[#111111] hover:bg-white disabled:bg-[#303030] disabled:text-[#777777]"
+          >
+            {t.installUpdate}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function localizedReleaseNotes(body: string | undefined, language: Language, fallback: string): string[] {
+  if (!body?.trim()) return [fallback]
+
+  const localized = extractLocalizedBlock(body, language) ?? body
+  const cleaned = localized
+    .split('\n')
+    .map((line) => line.replace(/^#{1,6}\s+/, '').replace(/^[-*]\s+/, '').trim())
+    .filter((line) => line && !/^<!--\s*kuota:(es|en)\s*-->$/i.test(line))
+    .filter((line) => !/^assets$/i.test(line))
+
+  return cleaned.length ? cleaned : [fallback]
+}
+
+function extractLocalizedBlock(body: string, language: Language): string | null {
+  const marker = `<!-- kuota:${language} -->`
+  const start = body.toLowerCase().indexOf(marker)
+  if (start < 0) return null
+
+  const contentStart = start + marker.length
+  const nextMarkerMatch = body.slice(contentStart).match(/<!--\s*kuota:(es|en)\s*-->/i)
+  const contentEnd = nextMarkerMatch?.index === undefined ? body.length : contentStart + nextMarkerMatch.index
+  return body.slice(contentStart, contentEnd).trim()
 }
 
 function CodexLoginModal({

@@ -1,6 +1,12 @@
 # DECISIONS
 
 Fecha: 2026-07-01
+Decisión: Hacer obligatorias las release notes bilingues y mostrar en app solo el idioma activo.
+Motivo: GitHub Releases debe comunicar cambios a usuarios en español e ingles, pero dentro de Kuota la experiencia debe respetar el idioma configurado por el usuario.
+Alternativas descartadas: Publicar notas solo en un idioma, porque rompe soporte bilingue; mostrar ambos idiomas dentro de la app, porque aumenta ruido visual en un popup compacto.
+Impacto: Cada release debe tener `docs/releases/<tag>.md` con bloques `<!-- kuota:es -->` y `<!-- kuota:en -->`; el workflow publica ambos y la app filtra el bloque local.
+
+Fecha: 2026-07-01
 Decisión: Publicar el login nativo macOS/Windows como release `1.0.4`.
 Motivo: El login oculto, la copia automatica del codigo y el manejo de errores de device auth son cambios visibles que deben llegar por autoupdate con version propia.
 Alternativas descartadas: Mantener `1.0.3`, porque dificultaria distinguir usuarios con el flujo anterior; publicar Linux, porque sigue sin validacion activa.

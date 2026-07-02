@@ -17,7 +17,7 @@ Kuota es una app de escritorio construida con Tauri, React y TypeScript. Su obje
 La app vive en la barra del sistema:
 
 - En macOS se despliega desde la menu bar.
-- En Windows/Linux se despliega desde la bandeja inferior.
+- En Windows se despliega desde la bandeja inferior.
 - Muestra una card por cuenta.
 - Refresca la cuota automaticamente consultando `codex-auth` cada 60 segundos.
 - Permite cambiar la cuenta activa de Codex.
@@ -107,7 +107,7 @@ Kuota usa una interfaz compacta y oscura inspirada en herramientas de menu bar.
 La ventana adapta sus esquinas segun el sistema operativo:
 
 - macOS: esquinas inferiores redondeadas, porque el popup baja desde la menu bar.
-- Windows/Linux: esquinas superiores redondeadas, porque el popup sube desde la bandeja inferior.
+- Windows: esquinas superiores redondeadas, porque el popup sube desde la bandeja inferior.
 
 ## Capturas
 
@@ -126,7 +126,7 @@ Kuota busca actualizaciones desde dos fuentes:
 - Kuota app: GitHub Releases mediante Tauri Updater.
 - codex-auth: paquete `@loongphy/codex-auth` mediante npm.
 
-El flujo in-app esta preparado para descargar, instalar y relanzar Kuota cuando exista una release firmada disponible. La configuracion final de releases y firma se documenta en [docs/AUTOUPDATE.md](docs/AUTOUPDATE.md).
+El flujo in-app esta preparado para mostrar un dialogo cuando exista una release firmada disponible, enseñar los cambios en el idioma activo de la app, descargar, instalar y relanzar Kuota solo si el usuario confirma. La configuracion final de releases y firma se documenta en [docs/AUTOUPDATE.md](docs/AUTOUPDATE.md).
 
 ## Desarrollo local
 
@@ -170,8 +170,11 @@ Hasta nuevo aviso, las compilaciones y releases oficiales se generan solo para m
 ### Reglas de release
 
 - Cada version nueva debe subir la version en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
-- Cada version nueva debe tener commits descriptivos y notas de cambios visibles en GitHub Releases.
+- Cada version nueva debe tener commits descriptivos y notas de cambios visibles en GitHub Releases en Espanol e Ingles.
+- Las notas bilingues deben vivir en `docs/releases/<tag>.md` usando los bloques `<!-- kuota:es -->` y `<!-- kuota:en -->`.
+- La app debe mostrar solo el bloque del idioma configurado por el usuario.
 - Los builds oficiales se publican solo para macOS y Windows hasta nuevo aviso.
+- Linux no esta soportado ni publicado oficialmente hasta nuevo aviso.
 
 ## Stack
 

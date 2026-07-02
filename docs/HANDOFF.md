@@ -1,5 +1,42 @@
 # HANDOFF
 
+## Actualización 2026-07-01: release 1.0.5
+
+- Version preparada como `1.0.5` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
+- La release incluye switch de cuenta en Windows sin `cmd.exe`, reinicio automatico verificado de Codex Desktop, dialogo localizado de nuevas versiones, notas bilingues de release en GitHub, y soporte Ko-fi/Rokaccino en Ajustes y Acerca de.
+- `docs/releases/v1.0.5.md` contiene cambios visibles en español e ingles; la app mostrara solo el idioma activo.
+- El flujo esperado es commit en `main`, tag `v1.0.5` y push de branch/tag para que `.github/workflows/release.yml` publique assets macOS/Windows.
+
+## Actualización 2026-07-01: reinicio automatico de Codex en Windows tras switch
+
+- `detect_codex_target()` ahora detecta `Codex.exe` en Windows mediante `tasklist` oculto.
+- `restart_codex_desktop()` en Windows obtiene la ruta real del `Codex.exe` vivo mediante PowerShell oculto, lo cierra con `taskkill`, espera a que desaparezca y reabre esa misma ruta.
+- El relaunch verifica que `Codex.exe` vuelva a aparecer; si el spawn directo no lo deja vivo, intenta `Start-Process` con PowerShell oculto y luego `explorer.exe` como fallback.
+- Despues de cerrar `Codex.exe`, espera a que el proceso desaparezca y deja un margen breve antes de volver a abrirlo para evitar locks de instancia.
+- Si no puede recuperar esa ruta, intenta rutas conocidas como `%LOCALAPPDATA%\Programs\Codex\Codex.exe`.
+- Si no encuentra Desktop, intenta abrir `codex` CLI como fallback.
+- No se usa `cmd.exe`; todo corre mediante procesos directos ocultos.
+- Validado con `npm run build`, `cargo fmt` y `cargo check` local.
+
+## Actualización 2026-07-01: dialogo localizado de nuevas versiones
+
+- `src/store/useStore.ts` ahora separa deteccion e instalacion de updates de Kuota: `checkForAppUpdate` guarda una update pendiente y `installPendingAppUpdate` descarga/instala solo cuando el usuario confirma.
+- `init()` ejecuta una revision silenciosa de Tauri Updater al arrancar; si GitHub Releases tiene una nueva version, se abre un dialogo.
+- `src/App.tsx` muestra `AppUpdateModal` con version actual, version nueva, progreso de descarga y cambios localizados.
+- Las release notes pueden incluir bloques `<!-- kuota:es -->` y `<!-- kuota:en -->`; la app muestra solo el idioma activo.
+- `docs/releases/v1.0.5.md` queda preparado en ambos idiomas para la proxima release.
+
+## Actualización 2026-07-01: switch de cuenta Windows sin CMD
+
+- `switch_codex_account` ya no ejecuta directamente el shim `codex-auth.cmd` en Windows.
+- `src-tauri/src/main.rs` ahora expone un launcher compartido que resuelve `codex-auth` a `node.exe <script>` cuando el binario encontrado es un shim npm.
+- `codex-auth --version`, `status`, `list` y `switch` usan `run_codex_auth_command`, por lo que el switch queda alineado con el login nativo oculto.
+- `src-tauri/src/windows_codex_login.rs` reutiliza `resolve_codex_auth_launcher()` y ya no duplica la resolucion de Node/script.
+- La busqueda de comandos en Windows prioriza `.exe` antes de `.cmd`; si solo existe el shim `.cmd`, los wrappers especificos de npm/codex-auth intentan resolverlo a Node/script.
+- Regla vigente: no usar CMD ni PowerShell visibles en Windows. PowerShell oculto queda permitido solo para operaciones nativas puntuales como `Set-Clipboard`.
+- Validado con `npm run build`, `cargo fmt` y `cargo check` local.
+- El `cargo check` dentro de Windows ARM UTM no llego a Kuota porque `ring` fallo al no encontrar `clang`/toolchain C; no es un error del cambio.
+
 ## Actualización 2026-07-01: release 1.0.4
 
 - Version preparada como `1.0.4` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
