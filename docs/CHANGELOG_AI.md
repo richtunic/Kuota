@@ -1,5 +1,52 @@
 # CHANGELOG_AI
 
+Fecha: 2026-07-19
+Tarea: Preparar release 1.0.6
+Cambios:
+- Version actualizada a `1.0.6` en manifests de npm, Tauri, Cargo y modal Acerca de Kuota.
+- Se agregaron notas bilingues para retirar visualmente la cuota de 5 horas y conservar solo la semanal.
+- Las notas incluyen en ambos idiomas el aviso solicitado sobre nuevos bugs para proximas versiones.
+- La release mantiene builds oficiales solo para macOS y Windows.
+Archivos:
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+- `src/App.tsx`
+- `docs/releases/v1.0.6.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` pasó.
+- `npm run lint` pasó.
+- `cargo fmt --check` pasó.
+- `cargo check` pasó.
+- `git diff --check` pasó.
+Notas:
+- No se agregaron dependencias ni secretos.
+
+Fecha: 2026-07-19
+Tarea: Simplificar la visualizacion a la cuota semanal de Codex
+Cambios:
+- Se retiro la cuota de 5 horas de la vista principal y de la tarjeta de cuenta.
+- La interfaz conserva solamente la cuota semanal, que es el limite vigente relevante para el usuario.
+- Se mantiene el parseo interno de la columna de 5 horas por compatibilidad con salidas anteriores de `codex-auth` y para no desplazar la columna semanal.
+Archivos:
+- `src/App.tsx`
+- `src/components/AccountCard.tsx`
+- `README.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` pasó.
+- `npm run lint` pasó.
+- `git diff --check` pasó.
+Notas:
+- No se agregaron dependencias ni se cambiaron flujos de autenticacion, cuentas o actualizacion de cuota.
+
 Fecha: 2026-07-01
 Tarea: Preparar release 1.0.5
 Cambios:

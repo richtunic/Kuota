@@ -1,5 +1,19 @@
 # HANDOFF
 
+## Actualización 2026-07-19: release 1.0.6
+
+- Version preparada como `1.0.6` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.
+- `docs/releases/v1.0.6.md` describe en español e ingles que Kuota deja de mostrar la cuota de 5 horas y conserva solo la semanal.
+- Las notas incluyen el texto solicitado sobre nuevos bugs en ambos idiomas.
+- El flujo esperado es commit en `main`, tag `v1.0.6` y push de branch/tag para que `.github/workflows/release.yml` publique assets macOS/Windows.
+
+## Actualización 2026-07-19: cuota visible solo semanal
+
+- La vista principal y la tarjeta de cuenta dejaron de mostrar la cuota de 5 horas; Kuota presenta solamente la cuota semanal restante.
+- El selector horizontal ya utilizaba la cuota semanal y no requirio cambios.
+- `CodexAuthAccount.five_hour_usage` y su parseo en Rust se conservan como detalle interno de compatibilidad: algunas versiones de `codex-auth list` todavia pueden incluir esa columna y se necesita consumirla para ubicar correctamente `weekly_usage`.
+- README actualizado para describir una unica cuota semanal visible.
+
 ## Actualización 2026-07-01: release 1.0.5
 
 - Version preparada como `1.0.5` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.

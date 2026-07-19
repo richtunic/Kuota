@@ -132,7 +132,6 @@ function CodexAuthUsage({ account }: { account: AccountUsage }) {
         <span className="text-[15px] leading-none text-white">Uso codex-auth</span>
       </div>
 
-      <UsageRow label="5 h" value={auth?.five_hour_usage ?? '-'} />
       <UsageRow label="Semanal" value={auth?.weekly_usage ?? '-'} />
     </div>
   )

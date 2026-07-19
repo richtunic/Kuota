@@ -1,5 +1,17 @@
 # DECISIONS
 
+Fecha: 2026-07-19
+Decisión: Publicar la eliminacion visual de la cuota de 5 horas como `v1.0.6` y mantener el aviso humoristico solicitado en español e ingles en las notas de esta y futuras versiones.
+Motivo: El cambio es visible para el usuario y debe distribuirse mediante autoupdate; las notas bilingues son la fuente mostrada por GitHub Releases y por el dialogo localizado de Kuota.
+Alternativas descartadas: Publicar sin incrementar version, porque los clientes no recibirian el cambio; incluir el aviso en un solo idioma, porque romperia la experiencia bilingue vigente.
+Impacto: Cada nueva nota en `docs/releases/v<version>.md` debe resumir los cambios reales e incluir "Se añadieron nuevos bugs para solucionar en proximas versiones." y "New bugs were added to be fixed in future versions." en sus bloques respectivos.
+
+Fecha: 2026-07-19
+Decisión: Mostrar solo la cuota semanal de Codex y conservar temporalmente el parseo interno de la columna de 5 horas.
+Motivo: Codex concentro el limite visible en la cuota semanal, por lo que mostrar una ventana de 5 horas agrega ruido; el parser posicional de `codex-auth list` aun debe tolerar salidas que incluyan ambas columnas.
+Alternativas descartadas: Eliminar de inmediato el campo y el parseo de 5 horas, porque podria desplazar la lectura de `weekly_usage` con versiones anteriores de `codex-auth`; mantener ambas cuotas visibles, porque ya no representa el producto actual.
+Impacto: La UI y el README hablan solo de cuota semanal; no cambian autenticacion, switching de cuentas ni frecuencia de refresco.
+
 Fecha: 2026-07-01
 Decisión: Hacer obligatorias las release notes bilingues y mostrar en app solo el idioma activo.
 Motivo: GitHub Releases debe comunicar cambios a usuarios en español e ingles, pero dentro de Kuota la experiencia debe respetar el idioma configurado por el usuario.

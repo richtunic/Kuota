@@ -21,7 +21,7 @@ La app vive en la barra del sistema:
 - Muestra una card por cuenta.
 - Refresca la cuota automaticamente consultando `codex-auth` cada 60 segundos.
 - Permite cambiar la cuenta activa de Codex.
-- Muestra el uso restante de la ventana de 5 horas y semanal.
+- Muestra la cuota semanal restante.
 
 ## Base tecnica
 
@@ -68,7 +68,6 @@ Kuota muestra la cuota restante, no la cuota consumida, para evitar confusiones.
 
 La vista principal muestra:
 
-- uso restante de `5 h`;
 - uso restante `Semanal`;
 - plan detectado;
 - ultima actividad;

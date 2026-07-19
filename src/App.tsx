@@ -273,7 +273,7 @@ export default function App() {
       {showAbout && (
         <AboutModal
           t={t}
-          appVersion="1.0.5"
+          appVersion="1.0.6"
           codexAuthVersion={version}
           onClose={() => setShowAbout(false)}
         />
@@ -391,7 +391,6 @@ function AccountDetail({
   syncLabel: string
   onSwitch: () => void
 }) {
-  const fiveHour = parseUsage(account.codexAuth?.five_hour_usage)
   const weekly = parseUsage(account.codexAuth?.weekly_usage)
 
   return (
@@ -414,7 +413,6 @@ function AccountDetail({
         </div>
       </div>
 
-      <UsageSection title="5 h" usage={fiveHour} t={t} />
       <UsageSection title={t.weekly} usage={weekly} t={t} />
 
       <div className="border-b border-[#242424] py-2.5">
