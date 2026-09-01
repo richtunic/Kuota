@@ -54,7 +54,7 @@ fn position_near_tray(window: &tauri::WebviewWindow, tray_position: Option<(f64,
     let work_area = monitor.work_area();
     let win_size = window
         .outer_size()
-        .unwrap_or_else(|_| tauri::PhysicalSize::new(360, 520));
+        .unwrap_or_else(|_| tauri::PhysicalSize::new(360, 590));
     let margin = 8;
 
     let Some((tray_x, _)) = tray_position else {

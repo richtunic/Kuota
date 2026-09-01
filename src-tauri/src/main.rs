@@ -7,8 +7,13 @@ mod tray;
 mod windows_codex_login;
 
 use serde::Serialize;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
+use tauri::Emitter;
 
 const CODEX_AUTH_PACKAGE: &str = "@loongphy/codex-auth";
 #[cfg(target_os = "windows")]
@@ -60,6 +65,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             let _ = disable_system_proxy();
 
+            start_codex_auth_file_watcher(app.handle().clone());
+            start_codex_usage_watcher(app.handle().clone());
             tray::setup_tray(app)?;
             Ok(())
         })
@@ -79,11 +86,180 @@ fn main() {
             cancel_codex_auth_login,
             codex_auth_open_authorization_url,
             switch_codex_account,
+            configure_codex_auto_switch,
+            auto_switch_codex_account,
             open_codex,
             quit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error running Codex Account Router");
+}
+
+fn start_codex_auth_file_watcher(app: tauri::AppHandle) {
+    let Some(auth_file) = codex_home_dir().map(|directory| directory.join("auth.json")) else {
+        return;
+    };
+
+    thread::spawn(move || {
+        let mut previous = file_stamp(&auth_file);
+
+        loop {
+            thread::sleep(Duration::from_millis(500));
+            let current = file_stamp(&auth_file);
+            if current == previous {
+                continue;
+            }
+
+            thread::sleep(Duration::from_millis(250));
+            previous = file_stamp(&auth_file);
+            let _ = app.emit("codex-auth-changed", ());
+        }
+    });
+}
+
+fn start_codex_usage_watcher(app: tauri::AppHandle) {
+    let Some(sessions_dir) = codex_home_dir().map(|directory| directory.join("sessions")) else {
+        return;
+    };
+
+    thread::spawn(move || {
+        let mut rollout = newest_rollout_file(&sessions_dir);
+        let mut previous_stamp = rollout.as_deref().and_then(file_stamp);
+        let mut exhausted = rollout.as_deref().is_some_and(rollout_reports_exhaustion);
+        let mut last_scan = Instant::now();
+
+        loop {
+            thread::sleep(Duration::from_millis(500));
+
+            if last_scan.elapsed() >= Duration::from_secs(5) {
+                let latest = newest_rollout_file(&sessions_dir);
+                if latest != rollout {
+                    rollout = latest;
+                    previous_stamp = None;
+                    exhausted = false;
+                }
+                last_scan = Instant::now();
+            }
+
+            let Some(path) = rollout.as_deref() else {
+                continue;
+            };
+            let current_stamp = file_stamp(path);
+            if current_stamp == previous_stamp {
+                continue;
+            }
+            previous_stamp = current_stamp;
+
+            let is_exhausted = rollout_reports_exhaustion(path);
+            if is_exhausted && !exhausted {
+                let _ = app.emit("codex-usage-exhausted", ());
+            }
+            exhausted = is_exhausted;
+        }
+    });
+}
+
+fn codex_home_dir() -> Option<PathBuf> {
+    std::env::var_os("CODEX_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .map(|home| PathBuf::from(home).join(".codex"))
+        })
+}
+
+fn file_stamp(path: &std::path::Path) -> Option<(SystemTime, u64)> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+fn newest_rollout_file(root: &std::path::Path) -> Option<PathBuf> {
+    let mut newest: Option<(SystemTime, PathBuf)> = None;
+    let mut pending = vec![root.to_path_buf()];
+
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                pending.push(entry.path());
+                continue;
+            }
+            if !file_type.is_file()
+                || entry.path().extension().and_then(|value| value.to_str()) != Some("jsonl")
+            {
+                continue;
+            }
+            let Ok(modified) = entry.metadata().and_then(|metadata| metadata.modified()) else {
+                continue;
+            };
+            if newest
+                .as_ref()
+                .is_none_or(|(current, _)| modified > *current)
+            {
+                newest = Some((modified, entry.path()));
+            }
+        }
+    }
+
+    newest.map(|(_, path)| path)
+}
+
+fn rollout_reports_exhaustion(path: &std::path::Path) -> bool {
+    const TAIL_BYTES: u64 = 128 * 1024;
+
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
+    let Ok(length) = file.metadata().map(|metadata| metadata.len()) else {
+        return false;
+    };
+    let start = length.saturating_sub(TAIL_BYTES);
+    if file.seek(SeekFrom::Start(start)).is_err() {
+        return false;
+    }
+
+    let mut tail = String::new();
+    if file.read_to_string(&mut tail).is_err() {
+        return false;
+    }
+    if start > 0 {
+        let Some(first_newline) = tail.find('\n') else {
+            return false;
+        };
+        tail = tail[first_newline + 1..].to_string();
+    }
+
+    for line in tail.lines().rev() {
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let Some(rate_limits) = event
+            .get("payload")
+            .and_then(|payload| payload.get("rate_limits"))
+        else {
+            continue;
+        };
+        if rate_limits.is_null() {
+            continue;
+        }
+
+        return ["primary", "secondary"].iter().any(|window| {
+            rate_limits
+                .get(window)
+                .and_then(|value| value.get("used_percent"))
+                .and_then(|value| value.as_f64())
+                .is_some_and(|used| used >= 100.0)
+        });
+    }
+
+    false
 }
 
 #[tauri::command]
@@ -117,6 +293,77 @@ async fn switch_codex_account(selector: String) -> Result<CodexAuthStatus, Strin
     run_codex_auth_command(&["switch", selector.as_str()])?;
     restart_codex_target(target);
     Ok(read_codex_auth_status(npm_latest_codex_auth_version().ok()))
+}
+
+#[tauri::command]
+async fn configure_codex_auto_switch(enabled: bool) -> Result<CodexAuthStatus, String> {
+    let status = run_codex_auth_command(&["status"]).unwrap_or_default();
+    if enabled || status.lines().any(|line| line.trim() == "auto-switch: ON") {
+        run_codex_auth_command(&["config", "auto", "disable"])?;
+    }
+
+    Ok(read_codex_auth_status(npm_latest_codex_auth_version().ok()))
+}
+
+#[tauri::command]
+async fn auto_switch_codex_account() -> Result<Option<CodexAuthStatus>, String> {
+    let status = read_codex_auth_status(None);
+    let Some(active) = status.accounts.iter().find(|account| account.active) else {
+        return Ok(None);
+    };
+    if !has_exhausted_applicable_quota(active) {
+        return Ok(None);
+    }
+
+    let Some(candidate) = status
+        .accounts
+        .iter()
+        .filter(|account| !account.active)
+        .filter_map(|account| available_quota_score(account).map(|score| (score, account)))
+        .max_by_key(|(score, _)| *score)
+        .map(|(_, account)| account)
+    else {
+        return Ok(None);
+    };
+
+    let target = detect_codex_target();
+    run_codex_auth_command(&["switch", candidate.email.as_str()])?;
+    if matches!(target, CodexTarget::Desktop) {
+        restart_codex_target(CodexTarget::Desktop);
+    }
+
+    Ok(Some(read_codex_auth_status(None)))
+}
+
+fn usage_percent(value: Option<&str>) -> Option<u8> {
+    let value = value?;
+    let percent_index = value.find('%')?;
+    let digits = value[..percent_index]
+        .split_whitespace()
+        .last()?
+        .parse::<u8>()
+        .ok()?;
+    (digits <= 100).then_some(digits)
+}
+
+fn has_exhausted_applicable_quota(account: &CodexAuthAccount) -> bool {
+    usage_percent(account.weekly_usage.as_deref()) == Some(0)
+        || usage_percent(account.five_hour_usage.as_deref()) == Some(0)
+}
+
+fn available_quota_score(account: &CodexAuthAccount) -> Option<u8> {
+    let weekly = usage_percent(account.weekly_usage.as_deref())?;
+    if weekly == 0 {
+        return None;
+    }
+
+    match account.five_hour_usage.as_deref() {
+        Some(value) => {
+            let five_hours = usage_percent(Some(value))?;
+            (five_hours > 0).then_some(weekly.min(five_hours))
+        }
+        None => Some(weekly),
+    }
 }
 
 #[tauri::command]
@@ -649,6 +896,10 @@ fn locate_node_exe() -> Option<PathBuf> {
 }
 
 fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
+    let has_five_hour_column = output
+        .lines()
+        .any(|line| line.to_ascii_uppercase().contains("5H USAGE"));
+
     output
         .lines()
         .filter_map(|line| {
@@ -658,8 +909,15 @@ fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
                 .position(|part| part.contains('@') && part.contains('.'))?;
             let email = tokens[email_index].to_string();
             let plan = tokens.get(email_index + 1).map(|value| value.to_string());
-            let five_hour_usage = read_usage_column(&tokens, email_index + 2);
-            let weekly_index = email_index + 2 + usage_column_width(&tokens, email_index + 2);
+            let usage_index = email_index + 2;
+            let five_hour_usage = has_five_hour_column
+                .then(|| read_usage_column(&tokens, usage_index))
+                .flatten();
+            let weekly_index = if has_five_hour_column {
+                usage_index + usage_column_width(&tokens, usage_index)
+            } else {
+                usage_index
+            };
             let weekly_usage = read_usage_column(&tokens, weekly_index);
             let last_index = weekly_index + usage_column_width(&tokens, weekly_index);
             let last_activity = if last_index < tokens.len() {
@@ -679,6 +937,120 @@ fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        available_quota_score, file_stamp, has_exhausted_applicable_quota,
+        parse_codex_auth_accounts, rollout_reports_exhaustion, CodexAuthAccount,
+    };
+
+    fn account(five_hours: Option<&str>, weekly: Option<&str>) -> CodexAuthAccount {
+        CodexAuthAccount {
+            email: "test@example.com".to_string(),
+            active: false,
+            plan: None,
+            five_hour_usage: five_hours.map(str::to_string),
+            weekly_usage: weekly.map(str::to_string),
+            last_activity: None,
+            raw: String::new(),
+        }
+    }
+
+    #[test]
+    fn parses_current_output_with_five_hour_column() {
+        let output = "ACCOUNT PLAN 5H USAGE WEEKLY USAGE LAST ACTIVITY\n\
+                      * 01 plus@example.com Plus 0% (2h 4m) 63% (3d) Now\n\
+                        02 free@example.com Free N/A 81% (5d) 2h ago";
+
+        let accounts = parse_codex_auth_accounts(output);
+
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].five_hour_usage.as_deref(), Some("0% (2h 4m)"));
+        assert_eq!(accounts[0].weekly_usage.as_deref(), Some("63% (3d)"));
+        assert_eq!(accounts[1].five_hour_usage.as_deref(), Some("N/A"));
+        assert_eq!(accounts[1].weekly_usage.as_deref(), Some("81% (5d)"));
+    }
+
+    #[test]
+    fn parses_output_without_five_hour_column() {
+        let output = "ACCOUNT PLAN WEEKLY USAGE LAST ACTIVITY\n\
+                      * 01 free@example.com Free 81% (5d) Now";
+
+        let accounts = parse_codex_auth_accounts(output);
+
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].five_hour_usage, None);
+        assert_eq!(accounts[0].weekly_usage.as_deref(), Some("81% (5d)"));
+        assert_eq!(accounts[0].last_activity.as_deref(), Some("Now"));
+    }
+
+    #[test]
+    fn detects_local_auth_file_changes() {
+        let path = std::env::temp_dir().join(format!("kuota-auth-watch-{}", std::process::id()));
+        std::fs::write(&path, b"first").expect("write initial auth fixture");
+        let before = file_stamp(&path);
+
+        std::fs::write(&path, b"second-value").expect("update auth fixture");
+        let after = file_stamp(&path);
+        let _ = std::fs::remove_file(path);
+
+        assert_ne!(before, after);
+    }
+
+    #[test]
+    fn accepts_only_candidates_with_known_available_quotas() {
+        assert_eq!(
+            available_quota_score(&account(Some("40%"), Some("80%"))),
+            Some(40)
+        );
+        assert_eq!(available_quota_score(&account(None, Some("80%"))), Some(80));
+        assert_eq!(
+            available_quota_score(&account(Some("0%"), Some("80%"))),
+            None
+        );
+        assert_eq!(
+            available_quota_score(&account(Some("401"), Some("80%"))),
+            None
+        );
+        assert_eq!(
+            available_quota_score(&account(Some("40%"), Some("N/A"))),
+            None
+        );
+    }
+
+    #[test]
+    fn detects_exhausted_active_quota() {
+        assert!(has_exhausted_applicable_quota(&account(
+            Some("0%"),
+            Some("80%")
+        )));
+        assert!(has_exhausted_applicable_quota(&account(
+            Some("40%"),
+            Some("0%")
+        )));
+        assert!(!has_exhausted_applicable_quota(&account(
+            Some("401"),
+            Some("80%")
+        )));
+    }
+
+    #[test]
+    fn detects_exhaustion_in_latest_rollout_rate_limits() {
+        let path = std::env::temp_dir().join(format!("kuota-rollout-{}.jsonl", std::process::id()));
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"payload\":{\"rate_limits\":{\"primary\":{\"used_percent\":99},\"secondary\":{\"used_percent\":20}}}}\n",
+                "{\"payload\":{\"rate_limits\":{\"primary\":{\"used_percent\":100},\"secondary\":{\"used_percent\":20}}}}\n"
+            ),
+        )
+        .expect("write rollout fixture");
+
+        assert!(rollout_reports_exhaustion(&path));
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 fn read_usage_column(tokens: &[&str], index: usize) -> Option<String> {

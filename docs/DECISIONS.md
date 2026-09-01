@@ -1,5 +1,35 @@
 # DECISIONS
 
+Fecha: 2026-08-31
+Decisión: Reemplazar la seleccion automatica nativa de `codex-auth` por una seleccion estricta controlada por Kuota.
+Motivo: `codex-auth 0.2.10` puede puntuar una candidata sin snapshot como `100%`; eso no garantiza que la cuenta destino tenga cuota real. Kuota debe cambiar solo cuando la semanal es valida y mayor que cero y, si existe la columna de 5 horas, tambien contiene un porcentaje valido mayor que cero.
+Alternativas descartadas: Validar despues del cambio, porque la autenticacion ya habria cambiado; consultar la API cada segundo, porque aumenta carga y riesgo de limites; eliminar cuentas sin datos del registro, porque seria destructivo.
+Impacto: Kuota deshabilita el auto-switch nativo al usar su opcion, observa localmente eventos `rate_limits`, valida candidatas en el backend antes del switch y conserva la cuenta activa si ninguna cumple. El polling de 60 segundos sigue como respaldo y el switch queda apagado por defecto.
+
+Fecha: 2026-08-31
+Decisión: Publicar las mejoras de cuotas, localizacion, layout y auto-switch estricto como `v1.0.7`.
+Motivo: Son cambios visibles y de comportamiento que deben llegar mediante el actualizador firmado con notas bilingues.
+Alternativas descartadas: Mantener `1.0.6`, porque los clientes no detectarian una nueva release; publicar sin notas explicitas, porque la app filtra esos bloques por idioma.
+Impacto: Se actualizan todos los manifests, el modal Acerca de y `docs/releases/v1.0.7.md`; el tag `v1.0.7` dispara builds oficiales macOS/Windows.
+
+Fecha: 2026-08-31
+Decisión: Aumentar el popover de 360x520 a 360x590 y localizar en frontend la actividad y las fechas de reinicio de `codex-auth`.
+Motivo: Reañadir la ventana de 5 horas agrego un bloque vertical completo y provoco scroll en la pantalla principal. La actividad y fechas de reinicio llegan como texto ingles (`Now`, `ago`, `on 1 Sep`) aunque Kuota este configurado en español.
+Alternativas descartadas: Comprimir las barras y textos, porque empeora legibilidad; ocultar detalles, porque elimina informacion util; traducir en Rust, porque el idioma es una preferencia de UI y el valor fuente debe conservarse.
+Impacto: La vista normal muestra ambas cuotas sin scroll en el caso esperado; la actividad y fechas de reinicio respetan el idioma activo. Ajustes conserva su scroll independiente para contenido variable.
+
+Fecha: 2026-08-31
+Decisión: Limitar los modales a la altura disponible y desplazar solo su cuerpo, conservando el encabezado fijo.
+Motivo: Ajustes puede crecer por la explicacion del auto-switch y la lista de cuentas; `overflow-hidden` sin altura maxima cortaba la informacion fuera del popup.
+Alternativas descartadas: Aumentar la ventana principal, porque altera el popover completo; reducir u ocultar texto, porque perderia informacion util; agregar scrolls por cada seccion, porque produce desplazamiento anidado innecesario.
+Impacto: Los modales cortos mantienen su tamaño y los largos quedan completamente accesibles mediante scroll vertical, sin cambiar el tamaño de Kuota.
+
+Fecha: 2026-08-31
+Decisión: Detectar la cuota de 5 horas por porcentaje valido y reaccionar a cambios locales de autenticacion mediante eventos Tauri.
+Motivo: La documentacion oficial describe ventanas compartidas de cinco horas en planes ChatGPT, pero no publica una estimacion especifica para Free. En la prueba real, la cuenta Free aparecio en la columna `5H USAGE` con `401`; por eso ni el plan ni la mera presencia de la columna prueban una cuota util. Un porcentaje parseable si es evidencia operativa. Consultar la API cada segundo seria costoso y podria generar 401/429, mientras `auth.json` cambia localmente cuando el motor conmuta la cuenta.
+Alternativas descartadas: Restringir 5 horas a Plus, porque excluiria una Free que reporte una ventana valida; mostrar cualquier texto de la columna, porque errores parecerian cuotas; reducir el polling API a segundos, porque aumenta carga sin crear streaming real; reiniciar o matar sesiones CLI, porque puede interrumpir trabajo activo.
+Impacto: Cualquier plan muestra 5 horas cuando recibe `%`; errores o ausencia fallan de forma segura. El watcher de archivos emite un evento en menos de un segundo despues del cambio local. La seleccion automatica estricta queda definida por la decision posterior de Kuota. No se agregan dependencias.
+
 Fecha: 2026-07-19
 Decisión: Publicar la eliminacion visual de la cuota de 5 horas como `v1.0.6` y mantener el aviso humoristico solicitado en español e ingles en las notas de esta y futuras versiones.
 Motivo: El cambio es visible para el usuario y debe distribuirse mediante autoupdate; las notas bilingues son la fuente mostrada por GitHub Releases y por el dialogo localizado de Kuota.

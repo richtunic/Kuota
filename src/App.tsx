@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { AccountForm } from './components/AccountForm'
 import { useStore, type CodexLoginState, type Language, type PendingAppUpdate } from './store/useStore'
 import codexLogo from './assets/codex-logo.png'
-import type { AccountUsage, ConfiguredAccount } from './types'
+import { usageRemainingPercent, type AccountUsage, type ConfiguredAccount } from './types'
 
 const copy = {
   es: {
@@ -16,6 +16,7 @@ const copy = {
     noUsage: 'Sin datos de uso',
     remaining: 'restante',
     weekly: 'Semanal',
+    fiveHours: '5 horas',
     account: 'Cuenta',
     email: 'Email',
     activity: 'Actividad',
@@ -61,6 +62,11 @@ const copy = {
     spanish: 'Español',
     english: 'Inglés',
     localOnly: 'Preferencias locales',
+    autoSwitch: 'Cambio automático de cuenta',
+    autoSwitchHelp: 'Al agotarse una cuota válida, cambia solo a una cuenta con porcentajes conocidos mayores que 0%. Si no existe, conserva la cuenta actual.',
+    autoSwitchEnable: 'Activar',
+    autoSwitchDisable: 'Desactivar',
+    autoSwitchLast: 'Último cambio automático',
     detected: 'Detectada por codex-auth',
     version: 'Versión',
     developedBy: 'Desarrollado por RichTunic en GitHub',
@@ -79,6 +85,7 @@ const copy = {
     noUsage: 'No usage data',
     remaining: 'remaining',
     weekly: 'Weekly',
+    fiveHours: '5 hours',
     account: 'Account',
     email: 'Email',
     activity: 'Activity',
@@ -124,6 +131,11 @@ const copy = {
     spanish: 'Spanish',
     english: 'English',
     localOnly: 'Local preferences',
+    autoSwitch: 'Automatic account switching',
+    autoSwitchHelp: 'When a valid quota runs out, switch only to an account with known percentages above 0%. If none exists, keep the current account.',
+    autoSwitchEnable: 'Enable',
+    autoSwitchDisable: 'Disable',
+    autoSwitchLast: 'Last automatic switch',
     detected: 'Detected by codex-auth',
     version: 'Version',
     developedBy: 'Developed by RichTunic on GitHub',
@@ -147,6 +159,9 @@ export default function App() {
     switchingAccountId,
     bootstrappingCodexAuth,
     checkingUpdates,
+    autoSwitchEnabled,
+    autoSwitchUpdating,
+    lastAutoSwitchEmail,
     updateDownloadProgress,
     updatesUpToDate,
     pendingAppUpdate,
@@ -154,6 +169,7 @@ export default function App() {
     addAccount,
     deleteAccount,
     setLanguage,
+    setAutoSwitch,
     switchAccount,
     loginAccount,
     cancelLoginAccount,
@@ -213,7 +229,7 @@ export default function App() {
 
   return (
     <div
-      className={`flex h-[520px] w-[360px] select-none flex-col overflow-hidden border-x border-[#242424] bg-[#0B0B0C] text-white shadow-2xl ${
+      className={`flex h-[590px] w-[360px] select-none flex-col overflow-hidden border-x border-[#242424] bg-[#0B0B0C] text-white shadow-2xl ${
         bottomAnchored ? 'rounded-t-xl border-t' : 'rounded-b-xl border-b'
       }`}
     >
@@ -239,6 +255,7 @@ export default function App() {
         ) : (
           <AccountDetail
             t={t}
+            language={language}
             account={selectedAccount}
             isActive={selectedAccount.configured.id === activeAccountId || Boolean(selectedAccount.codexAuth?.active)}
             isSwitching={selectedAccount.configured.id === switchingAccountId}
@@ -261,6 +278,10 @@ export default function App() {
           accounts={mergedAccounts}
           language={language}
           setLanguage={setLanguage}
+          autoSwitchEnabled={autoSwitchEnabled}
+          autoSwitchUpdating={autoSwitchUpdating}
+          lastAutoSwitchEmail={lastAutoSwitchEmail}
+          onSetAutoSwitch={setAutoSwitch}
           onDelete={deleteAccount}
           updateLabel={updateLabel}
           updateProgress={updateDownloadProgress}
@@ -273,7 +294,7 @@ export default function App() {
       {showAbout && (
         <AboutModal
           t={t}
-          appVersion="1.0.6"
+          appVersion="1.0.7"
           codexAuthVersion={version}
           onClose={() => setShowAbout(false)}
         />
@@ -378,6 +399,7 @@ function AccountTabs({
 
 function AccountDetail({
   t,
+  language,
   account,
   isActive,
   isSwitching,
@@ -385,13 +407,15 @@ function AccountDetail({
   onSwitch,
 }: {
   t: Record<string, string>
+  language: Language
   account: AccountUsage
   isActive: boolean
   isSwitching: boolean
   syncLabel: string
   onSwitch: () => void
 }) {
-  const weekly = parseUsage(account.codexAuth?.weekly_usage)
+  const weekly = parseUsage(account.codexAuth?.weekly_usage, language)
+  const fiveHours = parseUsage(account.codexAuth?.five_hour_usage, language)
 
   return (
     <div>
@@ -413,12 +437,15 @@ function AccountDetail({
         </div>
       </div>
 
+      {usageRemainingPercent(account.codexAuth?.five_hour_usage) !== undefined && (
+        <UsageSection title={t.fiveHours} usage={fiveHours} t={t} />
+      )}
       <UsageSection title={t.weekly} usage={weekly} t={t} />
 
       <div className="border-b border-[#242424] py-2.5">
         <div className="mb-1 text-[15px] font-semibold leading-5 text-white">{t.account}</div>
         <InfoRow label={t.email} value={account.configured.email || '-'} />
-        <InfoRow label={t.activity} value={account.codexAuth?.last_activity ?? '-'} />
+        <InfoRow label={t.activity} value={formatActivity(account.codexAuth?.last_activity, language)} />
       </div>
 
       <div className="border-b border-[#242424] py-2.5">
@@ -457,6 +484,10 @@ function SettingsModal({
   accounts,
   language,
   setLanguage,
+  autoSwitchEnabled,
+  autoSwitchUpdating,
+  lastAutoSwitchEmail,
+  onSetAutoSwitch,
   onDelete,
   updateLabel,
   updateProgress,
@@ -468,6 +499,10 @@ function SettingsModal({
   accounts: AccountUsage[]
   language: Language
   setLanguage: (language: Language) => void
+  autoSwitchEnabled: boolean
+  autoSwitchUpdating: boolean
+  lastAutoSwitchEmail: string | null
+  onSetAutoSwitch: (enabled: boolean) => Promise<void>
   onDelete: (id: string) => void
   updateLabel: string
   updateProgress: number | null
@@ -498,6 +533,32 @@ function SettingsModal({
               {t.english}
             </button>
           </div>
+        </section>
+
+        <section className="border-t border-[#242424] pt-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[12px] leading-4 text-white">{t.autoSwitch}</div>
+              <div className="mt-0.5 text-[10px] leading-3 text-[#8F8F8F]">{t.autoSwitchHelp}</div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoSwitchEnabled}
+              disabled={autoSwitchUpdating}
+              onClick={() => onSetAutoSwitch(!autoSwitchEnabled)}
+              className={`h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium disabled:opacity-60 ${
+                autoSwitchEnabled ? 'bg-[#8AE234] text-[#111111]' : 'bg-[#303030] text-[#D6D6D6]'
+              }`}
+            >
+              {autoSwitchUpdating ? '...' : autoSwitchEnabled ? t.autoSwitchDisable : t.autoSwitchEnable}
+            </button>
+          </div>
+          {lastAutoSwitchEmail && (
+            <div className="mt-1.5 truncate text-[10px] leading-3 text-[#8AE234]">
+              {t.autoSwitchLast}: {lastAutoSwitchEmail}
+            </div>
+          )}
         </section>
 
         <section className="border-t border-[#242424] pt-2">
@@ -789,14 +850,14 @@ function CodexLoginModal({
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-[328px] overflow-hidden rounded-lg border border-[#242424] bg-[#151515] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#242424] px-3 py-2">
+      <div className="flex max-h-[calc(100%-24px)] w-[328px] flex-col overflow-hidden rounded-lg border border-[#242424] bg-[#151515] shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#242424] px-3 py-2">
           <div className="text-[13px] leading-5 text-white">{title}</div>
           <button onClick={onClose} className="rounded px-2 py-1 text-[11px] text-[#A8A8A8] hover:bg-[#242424]">
             ×
           </button>
         </div>
-        <div className="p-3">{children}</div>
+        <div className="min-h-0 overflow-y-auto p-3">{children}</div>
       </div>
     </div>
   )
@@ -870,13 +931,37 @@ type ParsedUsage = {
   detail?: string
 }
 
-function parseUsage(value?: string): ParsedUsage {
+function parseUsage(value?: string, language: Language = 'en'): ParsedUsage {
   if (!value) return {}
   const percentMatch = value.match(/(\d+)%/)
   const resetMatch = value.match(/\(([^)]+)\)/)
   const percent = percentMatch ? Number(percentMatch[1]) : undefined
-  const reset = resetMatch?.[1]
-  return { percent, reset, detail: value }
+  const reset = resetMatch ? formatReset(resetMatch[1], language) : undefined
+  const detail = resetMatch && reset ? value.replace(resetMatch[1], reset) : value
+  return { percent, reset, detail }
+}
+
+function formatReset(value: string, language: Language): string {
+  if (language === 'en') return value
+
+  const months: Record<string, string> = {
+    jan: 'ene',
+    feb: 'feb',
+    mar: 'mar',
+    apr: 'abr',
+    may: 'may',
+    jun: 'jun',
+    jul: 'jul',
+    aug: 'ago',
+    sep: 'sep',
+    oct: 'oct',
+    nov: 'nov',
+    dec: 'dic',
+  }
+  const match = value.match(/^(.*?)\s+on\s+(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(.*)$/i)
+  if (!match) return value
+
+  return `${match[1]} el ${match[2]} ${months[match[3].toLowerCase()]}${match[4]}`
 }
 
 function shortAccountLabel(account: AccountUsage): string {
@@ -891,4 +976,30 @@ function formatAgo(date: Date, language: Language): string {
   if (diff < 60) return language === 'es' ? 'ahora' : 'just now'
   if (diff < 3600) return language === 'es' ? `hace ${Math.floor(diff / 60)}m` : `${Math.floor(diff / 60)}m ago`
   return language === 'es' ? `hace ${Math.floor(diff / 3600)}h` : `${Math.floor(diff / 3600)}h ago`
+}
+
+function formatActivity(value: string | undefined, language: Language): string {
+  if (!value) return '-'
+  if (language === 'en') return value
+
+  const normalized = value.trim()
+  if (/^now$/i.test(normalized)) return 'Ahora'
+  if (/^never$/i.test(normalized)) return 'Nunca'
+
+  const match = normalized.match(/^(\d+)\s*(s|m|h|d|w|second|minute|hour|day|week)s?\s+ago$/i)
+  if (!match) return value
+
+  const amount = Number(match[1])
+  const unit = match[2].toLowerCase()
+  const label = unit === 's' || unit === 'second'
+    ? 's'
+    : unit === 'm' || unit === 'minute'
+      ? 'min'
+      : unit === 'h' || unit === 'hour'
+        ? 'h'
+        : unit === 'd' || unit === 'day'
+          ? amount === 1 ? 'día' : 'días'
+          : amount === 1 ? 'semana' : 'semanas'
+
+  return `hace ${amount} ${label}`
 }

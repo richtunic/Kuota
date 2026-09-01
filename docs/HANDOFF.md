@@ -1,5 +1,33 @@
 # HANDOFF
 
+## Actualización 2026-08-31: release 1.0.7 y auto-switch estricto
+
+- Version preparada como `1.0.7` en npm, Cargo, Tauri y el modal Acerca de Kuota; `docs/releases/v1.0.7.md` contiene notas bilingues.
+- Kuota deshabilita el auto-switch nativo de `codex-auth` al usar su opcion y realiza la seleccion en el backend.
+- Una candidata requiere cuota semanal valida mayor que `0%`; si aparece la columna de 5 horas, tambien necesita un porcentaje valido mayor que `0%`. `401`, `N/A`, `RequestFailed`, valores ausentes y `0%` la descartan.
+- Si no existe candidata valida, `auto_switch_codex_account` devuelve sin cambiar `auth.json`, sin reiniciar Desktop y sin alterar sesiones CLI.
+- Tauri observa el rollout local mas reciente y emite `codex-usage-exhausted` al detectar la transicion de `used_percent` a `100`; entonces se hace una unica validacion completa. El refresco de 60 segundos permanece como respaldo.
+- La preferencia del auto-switch vive en el estado persistido de Kuota, queda apagada por defecto y puede desactivarse desde Ajustes.
+- Las pruebas Rust cubren seleccion valida, rechazo de cuotas desconocidas/agotadas, agotamiento de la cuenta activa y deteccion local del evento `rate_limits`.
+
+## Actualización 2026-08-31: cuota de 5 horas por capacidad y auto-switch reactivo
+
+- El popover aumento de 360x520 a 360x590 en `src/App.tsx`, `tauri.conf.json` y el fallback de `tray.rs`; la vista normal tiene espacio para las cuotas de 5 horas y semanal sin scroll interno.
+- `formatActivity()` localiza `Now`, `Never`, `15m ago`, `2h ago`, `41d ago` y variantes completas al español; en ingles conserva el texto original de `codex-auth`.
+- Los reinicios con fecha de `codex-auth` se localizan en español (`00:26 on 1 Sep` pasa a `00:26 el 1 sep`) en ambas apariciones visibles; formatos desconocidos e inglés se conservan sin cambios.
+- El contenedor `Modal` usa altura maxima con margen de 12 px y un cuerpo `overflow-y-auto`; Ajustes ya no corta cuentas ni la seccion inferior en el popup de 360x520 o alturas menores.
+- La vista principal y `AccountCard` muestran `five_hour_usage` cuando contiene un porcentaje valido, sin restringirlo a Plus. Free tambien puede mostrarlo cuando su sesion lo reporte; `401`, `N/A` y `RequestFailed` no se interpretan como cuotas.
+- El parser Rust detecta la presencia real del encabezado `5H USAGE`, por lo que `weekly_usage` queda alineado tanto con salidas actuales como con salidas sin esa columna.
+- Ajustes incorpora un switch bilingue para el auto-switch; la seleccion estricta vigente se describe en la actualizacion de `v1.0.7`.
+- Kuota exige que la cuenta activa reporte 0% en su cuota aplicable y valida la cuenta destino antes de cambiar. Valores ausentes, `N/A` o `RequestFailed` fallan de forma segura.
+- Tauri vigila el sello local de `CODEX_HOME/auth.json` (o `~/.codex/auth.json`) cada 500 ms y emite `codex-auth-changed` con debounce de 250 ms. El frontend refresca inmediatamente al recibirlo, por lo que un switch ya no depende del polling de 60 s.
+- No existe streaming oficial de porcentajes en la fuente usada por Kuota. El snapshot cada 60 s se conserva como reconciliacion visual y para cambios de uso que no modifican el archivo local.
+- Las sesiones de Codex CLI en ejecucion no se terminan automaticamente; el archivo de autenticacion ya queda cambiado para la siguiente sesion.
+- El auto-switch queda apagado por defecto; desde `v1.0.7` su fuente de verdad es la preferencia persistida de Kuota para poder reemplazar de forma segura el selector nativo.
+- Validado con `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check`, `cargo test`, `git diff --check`, arranque real con `npm run tauri:dev` y QA visual a 360x520. Las pruebas Rust cubren ambos formatos del parser y deteccion de cambio del archivo local.
+- El scroll de Ajustes se valido adicionalmente a 360x360: `clientHeight=293`, `scrollHeight=350`, `overflow=auto`, y el boton inferior permanecio accesible.
+- El nuevo shell se valido a 360x590 con `clientHeight=589` y `scrollHeight=589`, sin overflow propio; Tauri dev detecto el cambio de configuracion, recompilo y reinicio `target/debug/kuota`.
+
 ## Actualización 2026-07-19: release 1.0.6
 
 - Version preparada como `1.0.6` en `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json` y el modal `Acerca de Kuota`.

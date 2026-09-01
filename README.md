@@ -19,9 +19,10 @@ La app vive en la barra del sistema:
 - En macOS se despliega desde la menu bar.
 - En Windows se despliega desde la bandeja inferior.
 - Muestra una card por cuenta.
-- Refresca la cuota automaticamente consultando `codex-auth` cada 60 segundos.
+- Refresca la cuota consultando `codex-auth` cada 60 segundos como respaldo y reacciona de inmediato a cambios locales de cuenta.
 - Permite cambiar la cuenta activa de Codex.
-- Muestra la cuota semanal restante.
+- Muestra la cuota semanal y la cuota de 5 horas cuando `codex-auth` entrega un porcentaje valido.
+- Puede cambiar automaticamente a otra cuenta, pero solo cuando sus porcentajes de cuota son validos y mayores que `0%`.
 
 ## Base tecnica
 
@@ -69,11 +70,14 @@ Kuota muestra la cuota restante, no la cuota consumida, para evitar confusiones.
 La vista principal muestra:
 
 - uso restante `Semanal`;
+- uso restante de `5 horas` cuando la cuenta reporta esa ventana correctamente;
 - plan detectado;
 - ultima actividad;
 - cuenta activa en Codex.
 
-Kuota obtiene esta informacion ejecutando `codex-auth list` sin `--skip-api`, por lo que usa la consulta API que `codex-auth` trae activa por defecto. No es un stream en tiempo real dentro de Kuota: la app toma un snapshot actualizado al abrir, cada 60 segundos y tambien cuando la ventana vuelve a tomar foco.
+Kuota obtiene esta informacion ejecutando `codex-auth list` sin `--skip-api`, por lo que usa la consulta API que `codex-auth` trae activa por defecto. OpenAI no expone aqui un stream de porcentajes: la app toma un snapshot al abrir, cada 60 segundos y cuando la ventana vuelve a tomar foco. Ese intervalo queda como reconciliacion y no retrasa el auto-switch.
+
+La ventana de 5 horas se identifica por un porcentaje valido, no por el nombre del plan. Una cuenta Free puede mostrarla cuando su sesion la reporta; respuestas como `401`, `RequestFailed` o `N/A` se tratan como errores, no como cuotas. El parser tolera tanto salidas de `codex-auth` con la columna `5H USAGE` como salidas que no la incluyan.
 
 ### 4. Cambiar cuenta activa
 
@@ -94,14 +98,21 @@ Despues intenta reiniciar o abrir Codex para que la app tome la cuenta seleccion
 Desde `Ajustes` puedes:
 
 - cambiar idioma entre Espanol e Ingles;
+- activar o desactivar el cambio automatico estricto de Kuota;
 - buscar actualizaciones de `codex-auth`;
 - eliminar u ocultar cuentas que ya no quieres ver en Kuota.
+
+El cambio automatico se ejecuta solo cuando la cuenta activa llega a `0%` en una cuota aplicable y existe una candidata cuya cuota semanal es conocida y mayor que `0%`. Si la candidata reporta una ventana de 5 horas, esa cifra tambien debe ser valida y mayor que `0%`; `401`, `N/A`, `RequestFailed` y porcentajes ausentes la descartan. Si ninguna cuenta cumple estas condiciones, Kuota conserva la cuenta actual y no reinicia Codex.
+
+Kuota deshabilita el selector automatico interno de `codex-auth` para evitar que una cuenta sin datos sea tratada provisionalmente como disponible. En su lugar, Tauri observa localmente los eventos `rate_limits` de las sesiones Codex y solicita una validacion completa solo al detectar agotamiento. El snapshot cada 60 segundos se conserva como respaldo, sin consultar la API cada segundo. Kuota no cierra sesiones de CLI en ejecucion; la cuenta nueva se aplica en la siguiente sesion del CLI.
 
 La opcion `Cerrar app` esta disponible directamente en el footer del popup.
 
 ## Interfaz
 
 Kuota usa una interfaz compacta y oscura inspirada en herramientas de menu bar.
+
+El popover mide 360x590 px para mostrar juntas las cuotas de 5 horas y semanal sin scroll interno en el caso normal. La actividad y los reinicios entregados por `codex-auth` se localizan al idioma activo de Kuota: por ejemplo, `Now` se muestra como `Ahora`, `2h ago` como `hace 2 h` y `00:26 on 1 Sep` como `00:26 el 1 sep` en español.
 
 La ventana adapta sus esquinas segun el sistema operativo:
 

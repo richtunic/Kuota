@@ -51,6 +51,11 @@ export interface CodexAuthStatus {
   error?: string
 }
 
+export function usageRemainingPercent(value?: string): number | undefined {
+  const match = value?.match(/(\d+)%/)
+  return match ? Number(match[1]) : undefined
+}
+
 // Cuenta configurada manualmente por el usuario
 export interface ConfiguredAccount {
   id: string

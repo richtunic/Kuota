@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AccountUsage } from '../types'
+import { usageRemainingPercent, type AccountUsage } from '../types'
 
 interface Props {
   account: AccountUsage
@@ -132,6 +132,9 @@ function CodexAuthUsage({ account }: { account: AccountUsage }) {
         <span className="text-[15px] leading-none text-white">Uso codex-auth</span>
       </div>
 
+      {usageRemainingPercent(auth?.five_hour_usage) !== undefined && (
+        <UsageRow label="5 horas" value={auth?.five_hour_usage ?? '-'} />
+      )}
       <UsageRow label="Semanal" value={auth?.weekly_usage ?? '-'} />
     </div>
   )

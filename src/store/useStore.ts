@@ -5,7 +5,7 @@ import { check, type Update } from '@tauri-apps/plugin-updater'
 import type { DownloadEvent } from '@tauri-apps/plugin-updater'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { AccountUsage, CodexAuthAccount, CodexAuthStatus, ConfiguredAccount } from '../types'
+import { usageRemainingPercent, type AccountUsage, type CodexAuthAccount, type CodexAuthStatus, type ConfiguredAccount } from '../types'
 
 export type Language = 'es' | 'en'
 
@@ -50,6 +50,9 @@ interface AppState {
   switchingAccountId: string | null
   bootstrappingCodexAuth: boolean
   checkingUpdates: boolean
+  autoSwitchEnabled: boolean
+  autoSwitchUpdating: boolean
+  lastAutoSwitchEmail: string | null
   updateDownloadProgress: number | null
   updatesUpToDate: boolean
   pendingAppUpdate: PendingAppUpdate | null
@@ -60,6 +63,7 @@ interface AppState {
   updateAccount: (account: ConfiguredAccount) => void
   deleteAccount: (id: string) => void
   setLanguage: (language: Language) => void
+  setAutoSwitch: (enabled: boolean) => Promise<void>
   switchAccount: (account: ConfiguredAccount) => Promise<void>
   loginAccount: () => Promise<void>
   cancelLoginAccount: () => Promise<void>
@@ -78,9 +82,20 @@ interface AppState {
 
 let initialized = false
 let pendingTauriUpdate: Update | null = null
+let autoSwitchInFlight = false
 const isWindows = () => /win/i.test(navigator.platform)
 const isMac = () => /mac/i.test(navigator.platform)
 const hasNativeLoginModal = () => isWindows() || isMac()
+
+function activeEmailFromStatus(status: CodexAuthStatus): string {
+  return normalizeKey(status.accounts.find((account) => account.active)?.email)
+}
+
+function hasExhaustedApplicableQuota(account?: CodexAuthAccount): boolean {
+  if (!account) return false
+  return usageRemainingPercent(account.weekly_usage) === 0
+    || usageRemainingPercent(account.five_hour_usage) === 0
+}
 
 function mergeAccounts(
   configured: ConfiguredAccount[],
@@ -285,6 +300,9 @@ export const useStore = create<AppState>()(
     switchingAccountId: null,
       bootstrappingCodexAuth: false,
       checkingUpdates: false,
+      autoSwitchEnabled: false,
+      autoSwitchUpdating: false,
+      lastAutoSwitchEmail: null,
       updateDownloadProgress: null,
       updatesUpToDate: false,
       pendingAppUpdate: null,
@@ -343,6 +361,25 @@ export const useStore = create<AppState>()(
     },
 
       setLanguage: (language) => set({ language }),
+
+      setAutoSwitch: async (enabled) => {
+        set({ autoSwitchUpdating: true, error: null })
+        try {
+          const status = await invoke<CodexAuthStatus>('configure_codex_auto_switch', { enabled })
+          set((state) => ({
+            autoSwitchEnabled: enabled,
+            codexAuth: status,
+            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+            lastSync: new Date(),
+            lastAutoSwitchEmail: enabled ? state.lastAutoSwitchEmail : null,
+            mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
+          }))
+        } catch (error) {
+          set({ error: String(error) })
+        } finally {
+          set({ autoSwitchUpdating: false })
+        }
+      },
 
       switchAccount: async (account) => {
         set({ switchingAccountId: account.id, error: null })
@@ -454,11 +491,35 @@ export const useStore = create<AppState>()(
         try {
           const status = await invoke<CodexAuthStatus>('codex_auth_status')
           set((state) => ({
-          codexAuth: status,
-          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
-          lastSync: new Date(),
-          mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
-        }))
+            codexAuth: status,
+            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+            lastSync: new Date(),
+            mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
+          }))
+
+          if (
+            get().autoSwitchEnabled
+            && hasExhaustedApplicableQuota(status.accounts.find((account) => account.active))
+            && !get().switchingAccountId
+            && !autoSwitchInFlight
+          ) {
+            autoSwitchInFlight = true
+            try {
+              const switched = await invoke<CodexAuthStatus | null>('auto_switch_codex_account')
+              if (switched) {
+                const activeEmail = activeEmailFromStatus(switched)
+                set((state) => ({
+                  codexAuth: switched,
+                  activeAccountId: activeIdFromStatus(switched, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+                  lastAutoSwitchEmail: activeEmail || state.lastAutoSwitchEmail,
+                  lastSync: new Date(),
+                  mergedAccounts: mergeAccounts(state.accounts, switched, state.hiddenAccountKeys),
+                }))
+              }
+            } finally {
+              autoSwitchInFlight = false
+            }
+          }
         } catch (error) {
           set({ error: String(error) })
         }
@@ -466,7 +527,7 @@ export const useStore = create<AppState>()(
 
     ensureCodexAuth: async () => {
       set({ bootstrappingCodexAuth: true, error: null })
-      try {
+        try {
           const status = await invoke<CodexAuthStatus>('ensure_codex_auth')
           set((state) => ({
           codexAuth: status,
@@ -613,6 +674,17 @@ export const useStore = create<AppState>()(
           }).catch((error) => set({ error: String(error) }))
         }
 
+        listen('codex-auth-changed', () => {
+          get().refreshCodexAuth()
+        }).catch((error) => set({ error: String(error) }))
+
+        listen('codex-usage-exhausted', () => {
+          if (get().autoSwitchEnabled) get().refreshCodexAuth()
+        }).catch((error) => set({ error: String(error) }))
+
+        invoke('configure_codex_auto_switch', { enabled: get().autoSwitchEnabled })
+          .catch((error) => set({ error: String(error) }))
+
         window.setInterval(() => {
           get().refreshCodexAuth()
         }, 60_000)
@@ -628,7 +700,7 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'gpt-router-store',
-      version: 5,
+      version: 6,
       migrate: (persistedState: unknown) => {
         const state = persistedState as Partial<AppState> | undefined
         if (!state?.accounts) return persistedState
@@ -641,6 +713,7 @@ export const useStore = create<AppState>()(
             ? state.activeAccountId
             : accounts[0]?.id ?? null,
           language: state.language ?? 'es',
+          autoSwitchEnabled: state.autoSwitchEnabled ?? false,
           hiddenAccountKeys: state.hiddenAccountKeys ?? [],
         }
       },

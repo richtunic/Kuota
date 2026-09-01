@@ -1,5 +1,80 @@
 # CHANGELOG_AI
 
+Fecha: 2026-08-31
+Tarea: Preparar Kuota 1.0.7 con auto-switch estricto
+Cambios:
+- Kuota controla la seleccion automatica y deshabilita el auto-switch nativo de `codex-auth` para no aceptar candidatas con cuota desconocida.
+- La cuenta destino exige semanal valida mayor que `0%` y, cuando existe la columna de 5 horas, tambien un porcentaje valido mayor que `0%`.
+- Sin candidata valida no se cambia `auth.json`, no se reinicia Codex Desktop y no se altera ninguna sesion CLI.
+- Un watcher local detecta `rate_limits` agotados en el rollout activo y dispara una unica validacion completa; el snapshot de 60 segundos queda como respaldo.
+- La preferencia de auto-switch se persiste en Kuota y permanece desactivada por defecto.
+- Version actualizada a `1.0.7` en todos los manifests y el modal Acerca de; se agregaron notas bilingues y se actualizo README.
+Archivos:
+- `src-tauri/src/main.rs`
+- `src/store/useStore.ts`
+- `src/App.tsx`
+- `README.md`
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+- `docs/releases/v1.0.7.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` paso.
+- `npm run lint` paso.
+- `cargo fmt --check` paso.
+- `cargo check` paso.
+- `cargo test` paso con 6 pruebas.
+- `git diff --check` paso.
+- `npm run tauri:dev` recompilo y arranco `target/debug/kuota` como version `1.0.7`.
+Notas:
+- No se agregaron dependencias ni secretos.
+
+Fecha: 2026-08-31
+Tarea: Reañadir cuota de 5 horas por capacidad y auto-switch reactivo
+Cambios:
+- Se aumento la altura real del popover de 520 a 590 px en React, Tauri y el fallback de posicionamiento para evitar scroll interno en la vista normal de cuotas.
+- La actividad de `codex-auth` ahora se localiza: `Now`, `Never` y formatos `ago` compactos o completos se muestran en español cuando corresponde.
+- Los reinicios con formato `00:26 on 1 Sep` ahora se muestran como `00:26 el 1 sep` en español, tanto en el encabezado de la cuota como en su detalle; inglés conserva el valor original.
+- Se corrigio el corte de informacion en Ajustes: los modales ahora respetan la altura disponible, mantienen el encabezado fijo y desplazan verticalmente su contenido.
+- Se reañadio la cuota de 5 horas para cualquier cuenta que entregue un porcentaje valido; Free deja de estar excluido por nombre de plan.
+- Valores `401`, `RequestFailed`, `N/A` o ausentes no se muestran como cuota ni disparan auto-switch.
+- El parser de `codex-auth list` ahora detecta el encabezado `5H USAGE` y conserva correctamente la cuota semanal cuando esa columna no existe.
+- Se agregaron dos pruebas Rust para ambos formatos de salida.
+- Ajustes permite habilitar o deshabilitar el auto-switch estricto controlado por Kuota.
+- Kuota confirma que la cuenta activa llego a 0%, valida la cuota destino y reinicia Codex Desktop una sola vez; datos fallidos no disparan el cambio y no se terminan sesiones CLI activas.
+- Tauri vigila `auth.json` cada 500 ms y emite un evento local con debounce; el frontend refresca al instante cuando `codex-auth` cambia la cuenta, sin esperar 60 s.
+- El polling API de 60 s se conserva como respaldo para porcentajes porque la fuente no ofrece streaming oficial.
+- El estado del toggle se persiste en Kuota y queda desactivado por defecto; el auto-switch nativo de `codex-auth` se mantiene apagado.
+Archivos:
+- `src-tauri/src/main.rs`
+- `src-tauri/src/tray.rs`
+- `src-tauri/tauri.conf.json`
+- `src/store/useStore.ts`
+- `src/types/index.ts`
+- `src/App.tsx`
+- `src/components/AccountCard.tsx`
+- `README.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` paso.
+- `npm run lint` paso.
+- `cargo fmt --check` paso.
+- `cargo check` paso.
+- `cargo test` paso con 3 pruebas.
+- `npm run tauri:dev` compilo y arranco `target/debug/kuota`.
+- QA visual del modal Ajustes paso a 360x520.
+- `git diff --check` paso.
+Notas:
+- No se agregaron dependencias, tokens ni logs de credenciales.
+- No se activo el auto-switch ni se cambiaron cuentas durante la validacion.
+
 Fecha: 2026-07-19
 Tarea: Preparar release 1.0.6
 Cambios:
