@@ -1,5 +1,49 @@
 # CHANGELOG_AI
 
+Fecha: 2026-09-02
+Tarea: Preparar Kuota 1.0.8 con relanzamiento compatible con ChatGPT Desktop
+Cambios:
+- Version actualizada a `1.0.8` en npm, Cargo, Tauri y el modal Acerca de Kuota.
+- Se agregaron notas bilingues en `docs/releases/v1.0.8.md` para la compatibilidad de relanzamiento con ChatGPT Desktop y Codex Desktop.
+- La release conserva intactas las sesiones de Codex CLI y no incorpora renovacion OAuth propia; el diagnostico de snapshots caducados permanece fuera de este alcance.
+Archivos:
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+- `src/App.tsx`
+- `docs/releases/v1.0.8.md`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` paso mostrando `kuota@1.0.8`.
+- `npm run lint`, `cargo fmt --check`, `cargo check`, `cargo test` y `git diff --check` pasaron.
+- Las 7 pruebas Rust pasaron, incluida la deteccion de ChatGPT Desktop y Codex Desktop.
+Notas:
+- La entrega se publica desde `main` mediante el tag `v1.0.8`, que dispara los builds oficiales de macOS y Windows.
+- No se agregaron dependencias ni secretos.
+
+Fecha: 2026-09-02
+Tarea: Reabrir Codex o ChatGPT Desktop despues de cambiar cuenta
+Cambios:
+- La deteccion de Desktop reconoce tanto `ChatGPT.app`/`ChatGPT.exe` como los nombres anteriores `Codex.app`/`Codex.exe`.
+- En macOS, el reinicio usa el bundle estable `com.openai.codex`, confirmado en la instalacion actual de `ChatGPT.app`, para no depender del nombre visible de la app.
+- En Windows, Kuota conserva la ruta y el nombre del ejecutable Desktop que estaba activo, lo cierra y verifica que vuelva a abrir ese mismo proceso.
+- Se mantienen las sesiones de Codex CLI sin cerrarlas y no se agregaron dependencias.
+Archivos:
+- `src-tauri/src/main.rs`
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- Prueba Rust agregada para reconocer los nombres anterior y actual de Desktop sin confundir Codex CLI.
+- `cargo test` paso con 7 pruebas y `cargo check` paso en macOS.
+- `npm run build`, `npm run lint`, `cargo fmt --check` y `git diff --check` pasaron.
+- El proceso real activo se confirmo en `/Applications/ChatGPT.app/Contents/MacOS/ChatGPT` y su bundle identifier es `com.openai.codex`.
+- El check cruzado de Windows quedo bloqueado en la dependencia `ring` por falta del toolchain C/MSVC (`assert.h`), antes de compilar Kuota.
+
 Fecha: 2026-08-31
 Tarea: Preparar Kuota 1.0.7 con auto-switch estricto
 Cambios:

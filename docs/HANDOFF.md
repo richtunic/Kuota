@@ -1,5 +1,22 @@
 # HANDOFF
 
+## Actualización 2026-09-02: release 1.0.8 preparada
+
+- Version actualizada a `1.0.8` en npm, Cargo, Tauri y el modal Acerca de Kuota.
+- `docs/releases/v1.0.8.md` contiene notas bilingues sobre el relanzamiento compatible con ChatGPT Desktop y Codex Desktop.
+- Esta version incluye unicamente el arreglo de deteccion/reapertura ya validado; no agrega renovacion OAuth propia ni cambios al almacenamiento de sesiones.
+- Validado con `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check`, `cargo test` (7 pruebas) y `git diff --check`.
+- Publicacion solicitada: commit en `main`, tag `v1.0.8` y push para disparar los assets oficiales de macOS/Windows; verificar el workflow y la release publica despues del push.
+
+## Actualización 2026-09-02: relanzamiento compatible con ChatGPT Desktop
+
+- OpenAI renombro la app visible de `Codex.app` a `ChatGPT.app`, conservando en macOS el bundle identifier `com.openai.codex`.
+- Kuota detecta ambos nombres de app/proceso antes del switch y, en macOS, cierra y abre el bundle identifier estable.
+- En Windows se reconocen `ChatGPT.exe` y `Codex.exe`; si Desktop estaba activo, se conserva su ruta real, se cierra ese proceso y se verifica el relanzamiento con el mismo nombre.
+- La deteccion de CLI excluye las rutas de ambas apps Desktop y las sesiones CLI en curso siguen sin terminarse.
+- Build, lint, `cargo check` y 7 pruebas Rust pasan; la ruta y bundle del proceso real activo quedaron confirmados. Falta validar el cierre/reapertura real de extremo a extremo sin interrumpir la sesion activa de ChatGPT/Codex donde se desarrollo el cambio.
+- El check cruzado Windows sigue bloqueado en `ring` por falta del toolchain C/MSVC (`assert.h`), antes de compilar el codigo de Kuota.
+
 ## Actualización 2026-08-31: release 1.0.7 y auto-switch estricto
 
 - Version preparada como `1.0.7` en npm, Cargo, Tauri y el modal Acerca de Kuota; `docs/releases/v1.0.7.md` contiene notas bilingues.

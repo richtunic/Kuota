@@ -1,5 +1,17 @@
 # DECISIONS
 
+Fecha: 2026-09-02
+Decisión: Publicar la compatibilidad de relanzamiento con ChatGPT Desktop como `v1.0.8`.
+Motivo: El cambio corrige un comportamiento visible despues de seleccionar una cuenta y debe llegar mediante el actualizador firmado con notas bilingues.
+Alternativas descartadas: Mantener `1.0.7`, porque los clientes instalados no detectarian el arreglo; incluir renovacion OAuth propia, porque el fix upstream de snapshots caducados sigue sin release oficial y requiere una revision de seguridad separada.
+Impacto: Se actualizan manifests, lockfiles, el modal Acerca de Kuota y `docs/releases/v1.0.8.md`; la publicacion queda pendiente de commit/tag/push.
+
+Fecha: 2026-09-02
+Decisión: Identificar Codex/ChatGPT Desktop por el bundle estable en macOS y por el proceso realmente activo en Windows.
+Motivo: La app instalada actualmente se llama `ChatGPT.app`, pero conserva `com.openai.codex`; depender solo de `Codex.app` hacia que el cambio de cuenta funcionara y el relanzamiento apuntara a una app inexistente.
+Alternativas descartadas: Reabrir siempre por el nombre `ChatGPT`, porque rompe instalaciones anteriores; cerrar todas las variantes, porque puede afectar procesos no seleccionados; modificar `codex-auth`, porque el cambio de credenciales ya funciona.
+Impacto: Kuota mantiene compatibilidad con el nombre anterior y el actual, reabre la variante Desktop detectada y conserva intactas las sesiones CLI.
+
 Fecha: 2026-08-31
 Decisión: Reemplazar la seleccion automatica nativa de `codex-auth` por una seleccion estricta controlada por Kuota.
 Motivo: `codex-auth 0.2.10` puede puntuar una candidata sin snapshot como `100%`; eso no garantiza que la cuenta destino tenga cuota real. Kuota debe cambiar solo cuando la semanal es valida y mayor que cero y, si existe la columna de 5 horas, tambien contiene un porcentaje valido mayor que cero.

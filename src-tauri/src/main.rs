@@ -943,7 +943,8 @@ fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
 mod tests {
     use super::{
         available_quota_score, file_stamp, has_exhausted_applicable_quota,
-        parse_codex_auth_accounts, rollout_reports_exhaustion, CodexAuthAccount,
+        macos_codex_desktop_running, parse_codex_auth_accounts, rollout_reports_exhaustion,
+        CodexAuthAccount,
     };
 
     fn account(five_hours: Option<&str>, weekly: Option<&str>) -> CodexAuthAccount {
@@ -997,6 +998,19 @@ mod tests {
         let _ = std::fs::remove_file(path);
 
         assert_ne!(before, after);
+    }
+
+    #[test]
+    fn detects_codex_desktop_before_and_after_chatgpt_rename() {
+        assert!(macos_codex_desktop_running(
+            "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"
+        ));
+        assert!(macos_codex_desktop_running(
+            "/Applications/Codex.app/Contents/MacOS/Codex"
+        ));
+        assert!(!macos_codex_desktop_running(
+            "/opt/homebrew/bin/codex --resume"
+        ));
     }
 
     #[test]
@@ -1129,17 +1143,18 @@ pub(crate) fn apply_extended_path(command: &mut Command) {
 fn detect_codex_target() -> CodexTarget {
     #[cfg(target_os = "macos")]
     {
-        if process_output_contains("ps", &["aux"], "/Applications/Codex.app") {
-            return CodexTarget::Desktop;
-        }
-
         let ps = hidden_command("ps").args(["aux"]).output();
         if let Ok(output) = ps {
             let stdout = String::from_utf8_lossy(&output.stdout);
+            if macos_codex_desktop_running(&stdout) {
+                return CodexTarget::Desktop;
+            }
+
             let cli_running = stdout.lines().any(|line| {
                 let lower = line.to_lowercase();
                 lower.contains(" codex ")
                     && !lower.contains("/applications/codex.app")
+                    && !lower.contains("/applications/chatgpt.app")
                     && !lower.contains("gpt-router")
                     && !lower.contains("codex-auth")
             });
@@ -1152,7 +1167,7 @@ fn detect_codex_target() -> CodexTarget {
 
     #[cfg(target_os = "windows")]
     {
-        if windows_process_running("Codex.exe") {
+        if windows_process_running("ChatGPT.exe") || windows_process_running("Codex.exe") {
             return CodexTarget::Desktop;
         }
         if windows_process_running("codex.exe") {
@@ -1170,31 +1185,47 @@ fn restart_codex_target(target: CodexTarget) {
     }
 }
 
-fn process_output_contains(command: &str, args: &[&str], needle: &str) -> bool {
-    hidden_command(command)
-        .args(args)
-        .output()
-        .map(|output| String::from_utf8_lossy(&output.stdout).contains(needle))
-        .unwrap_or(false)
+fn macos_codex_desktop_running(processes: &str) -> bool {
+    processes.contains("/ChatGPT.app/Contents/MacOS/")
+        || processes.contains("/Codex.app/Contents/MacOS/")
 }
 
 fn restart_codex_desktop() {
     #[cfg(target_os = "macos")]
     {
         let _ = hidden_command("osascript")
-            .args(["-e", "tell application \"Codex\" to quit"])
+            .args(["-e", "tell application id \"com.openai.codex\" to quit"])
             .status();
         std::thread::sleep(std::time::Duration::from_millis(800));
-        let _ = hidden_command("open").args(["-a", "Codex"]).spawn();
+        let opened = hidden_command("open")
+            .args(["-b", "com.openai.codex"])
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if !opened {
+            let opened_chatgpt = hidden_command("open")
+                .args(["-a", "ChatGPT"])
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false);
+            if !opened_chatgpt {
+                let _ = hidden_command("open").args(["-a", "Codex"]).spawn();
+            }
+        }
     }
 
     #[cfg(target_os = "windows")]
     {
-        let running_executable = running_windows_codex_desktop_path();
-        let _ = hidden_command("taskkill")
-            .args(["/IM", "Codex.exe", "/F"])
-            .status();
-        wait_for_windows_process_exit("Codex.exe", 2400);
+        let running_image = ["ChatGPT.exe", "Codex.exe"]
+            .into_iter()
+            .find(|image_name| windows_process_running(image_name));
+        let running_executable = running_image.and_then(running_windows_codex_desktop_path);
+        if let Some(image_name) = running_image {
+            let _ = hidden_command("taskkill")
+                .args(["/IM", image_name, "/F"])
+                .status();
+            wait_for_windows_process_exit(image_name, 2400);
+        }
         std::thread::sleep(std::time::Duration::from_millis(600));
 
         if running_executable
@@ -1261,14 +1292,13 @@ fn wait_for_windows_process_start(image_name: &str, timeout_ms: u64) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn running_windows_codex_desktop_path() -> Option<PathBuf> {
+fn running_windows_codex_desktop_path(image_name: &str) -> Option<PathBuf> {
+    let query = format!(
+        "$p = Get-CimInstance Win32_Process -Filter \"Name = '{}'\" | Select-Object -First 1 -ExpandProperty ExecutablePath; if ($p) {{ Write-Output $p }}",
+        image_name
+    );
     let output = hidden_command("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "$p = Get-CimInstance Win32_Process -Filter \"Name = 'Codex.exe'\" | Select-Object -First 1 -ExpandProperty ExecutablePath; if ($p) { Write-Output $p }",
-        ])
+        .args(["-NoProfile", "-NonInteractive", "-Command", &query])
         .output()
         .ok()?;
 
@@ -1287,6 +1317,10 @@ fn running_windows_codex_desktop_path() -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn open_windows_executable(executable: PathBuf) -> Result<(), String> {
+    let image_name = executable
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Codex.exe");
     let parent = executable.parent().map(|path| path.to_path_buf());
     let executable_arg = executable.to_string_lossy().to_string();
     let working_dir_arg = parent
@@ -1300,7 +1334,7 @@ fn open_windows_executable(executable: PathBuf) -> Result<(), String> {
         direct.current_dir(parent);
     }
     let direct_result = direct.spawn();
-    if direct_result.is_ok() && wait_for_windows_process_start("Codex.exe", 3000) {
+    if direct_result.is_ok() && wait_for_windows_process_start(image_name, 3000) {
         return Ok(());
     }
 
@@ -1317,7 +1351,7 @@ fn open_windows_executable(executable: PathBuf) -> Result<(), String> {
     if powershell_result
         .map(|status| status.success())
         .unwrap_or(false)
-        && wait_for_windows_process_start("Codex.exe", 4000)
+        && wait_for_windows_process_start(image_name, 4000)
     {
         return Ok(());
     }
@@ -1326,13 +1360,13 @@ fn open_windows_executable(executable: PathBuf) -> Result<(), String> {
     if explorer_result
         .map(|status| status.success())
         .unwrap_or(false)
-        && wait_for_windows_process_start("Codex.exe", 5000)
+        && wait_for_windows_process_start(image_name, 5000)
     {
         return Ok(());
     }
 
     Err(format!(
-        "No se pudo abrir Codex Desktop desde {}",
+        "No se pudo abrir Codex/ChatGPT Desktop desde {}",
         executable.to_string_lossy()
     ))
 }
@@ -1350,6 +1384,9 @@ fn locate_windows_codex_desktop() -> Option<PathBuf> {
 
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let root = PathBuf::from(local_app_data);
+        candidates.push(root.join("Programs").join("ChatGPT").join("ChatGPT.exe"));
+        candidates.push(root.join("ChatGPT").join("ChatGPT.exe"));
+        candidates.push(root.join("OpenAI").join("ChatGPT").join("ChatGPT.exe"));
         candidates.push(root.join("Programs").join("Codex").join("Codex.exe"));
         candidates.push(root.join("Programs").join("codex").join("Codex.exe"));
         candidates.push(root.join("Codex").join("Codex.exe"));
@@ -1358,12 +1395,16 @@ fn locate_windows_codex_desktop() -> Option<PathBuf> {
 
     if let Ok(program_files) = std::env::var("ProgramFiles") {
         let root = PathBuf::from(program_files);
+        candidates.push(root.join("ChatGPT").join("ChatGPT.exe"));
+        candidates.push(root.join("OpenAI").join("ChatGPT").join("ChatGPT.exe"));
         candidates.push(root.join("Codex").join("Codex.exe"));
         candidates.push(root.join("OpenAI").join("Codex").join("Codex.exe"));
     }
 
     if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
         let root = PathBuf::from(program_files_x86);
+        candidates.push(root.join("ChatGPT").join("ChatGPT.exe"));
+        candidates.push(root.join("OpenAI").join("ChatGPT").join("ChatGPT.exe"));
         candidates.push(root.join("Codex").join("Codex.exe"));
         candidates.push(root.join("OpenAI").join("Codex").join("Codex.exe"));
     }
