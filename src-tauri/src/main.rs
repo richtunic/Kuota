@@ -9,7 +9,7 @@ mod windows_codex_login;
 use serde::Serialize;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -728,7 +728,19 @@ pub(crate) fn locate_command(command: &str) -> Option<PathBuf> {
         }
     }
 
+    // Manager-aware candidates: fnm/volta/nvm (GUI PATH often lacks them)
     if let Ok(home) = std::env::var("HOME") {
+        let home_path = Path::new(&home);
+        for bin_dir in fnm_bin_dirs(home_path) {
+            for command_name in &command_names {
+                candidates.push(bin_dir.join(command_name));
+            }
+        }
+        for bin_dir in volta_bin_dirs(home_path) {
+            for command_name in &command_names {
+                candidates.push(bin_dir.join(command_name));
+            }
+        }
         for command_name in &command_names {
             candidates.push(
                 PathBuf::from(&home)
@@ -741,12 +753,38 @@ pub(crate) fn locate_command(command: &str) -> Option<PathBuf> {
                     .join(".nvm/current/bin")
                     .join(command_name),
             );
+            // nvm standard layout: ~/.nvm/versions/node/*/bin
+            candidates.push(
+                PathBuf::from(&home)
+                    .join(".nvm/versions/node")
+                    .join(command_name),
+            );
+        }
+    }
+    // Windows HOME may be USERPROFILE
+    if let Ok(userprofile) = std::env::var("USERPROFILE") {
+        let up = Path::new(&userprofile);
+        for bin_dir in fnm_bin_dirs(up) {
+            for command_name in &command_names {
+                candidates.push(bin_dir.join(command_name));
+            }
+        }
+        for bin_dir in volta_bin_dirs(up) {
+            for command_name in &command_names {
+                candidates.push(bin_dir.join(command_name));
+            }
         }
     }
 
     if let Ok(appdata) = std::env::var("APPDATA") {
         for command_name in &command_names {
             candidates.push(PathBuf::from(&appdata).join("npm").join(command_name));
+        }
+    }
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        for command_name in &command_names {
+            candidates.push(PathBuf::from(&localappdata).join("fnm").join(command_name));
+            candidates.push(PathBuf::from(&localappdata).join("Volta").join("bin").join(command_name));
         }
     }
 
@@ -756,7 +794,99 @@ pub(crate) fn locate_command(command: &str) -> Option<PathBuf> {
         candidates.push(PathBuf::from("/usr/bin").join(command_name));
     }
 
+    // Final dedup by existence check (prefer earlier candidates)
     candidates.into_iter().find(|path| path.exists())
+}
+
+fn fnm_bin_dirs(home: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Ok(multishell) = std::env::var("FNM_MULTISHELL_PATH") {
+        let p = PathBuf::from(multishell);
+        if !p.as_os_str().is_empty() {
+            dirs.push(p);
+        }
+    }
+
+    let mut bases: Vec<PathBuf> = Vec::new();
+    if let Ok(dir) = std::env::var("FNM_DIR") {
+        if !dir.is_empty() {
+            bases.push(PathBuf::from(dir));
+        }
+    }
+    bases.push(home.join(".local/share/fnm"));
+    bases.push(home.join(".fnm"));
+    bases.push(home.join("Library/Application Support/fnm"));
+    bases.push(home.join("Library/Caches/fnm_multishells"));
+    // Windows common locations even when HOME is Unix path
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        bases.push(PathBuf::from(appdata).join("fnm"));
+    }
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        bases.push(PathBuf::from(localappdata).join("fnm"));
+    }
+    if let Ok(userprofile) = std::env::var("USERPROFILE") {
+        bases.push(PathBuf::from(&userprofile).join(".fnm"));
+        bases.push(PathBuf::from(&userprofile).join(".local/share/fnm"));
+    }
+
+    // Deduplicate bases
+    bases.sort();
+    bases.dedup();
+
+    for base in bases {
+        // fnm aliases: default points to current node — handle both Unix (bin) and Windows (direct)
+        dirs.push(base.join("aliases/default"));
+        dirs.push(base.join("aliases/default/bin"));
+        dirs.push(base.join("alias/default"));
+        dirs.push(base.join("alias/default/bin"));
+        // multishells may contain ephemeral shells
+        let multishells = base.join("multishells");
+        if let Ok(entries) = std::fs::read_dir(&multishells) {
+            for entry in entries.flatten() {
+                let bin = entry.path().join("bin");
+                if bin.exists() {
+                    dirs.push(bin);
+                } else if entry.path().is_dir() {
+                    // some fnm versions (Windows) put node directly under multishell hash
+                    dirs.push(entry.path());
+                }
+            }
+        }
+        // node-versions/*/installation — Windows: installation, Unix: installation/bin
+        let versions = base.join("node-versions");
+        if let Ok(entries) = std::fs::read_dir(&versions) {
+            for entry in entries.flatten() {
+                let bin_unix = entry.path().join("installation/bin");
+                let bin_win = entry.path().join("installation");
+                if bin_unix.exists() {
+                    dirs.push(bin_unix);
+                }
+                if bin_win.exists() {
+                    dirs.push(bin_win);
+                }
+            }
+        }
+    }
+
+    // Keep order, dedup
+    let mut seen = std::collections::HashSet::new();
+    dirs.into_iter().filter(|p| seen.insert(p.clone())).collect()
+}
+
+fn volta_bin_dirs(home: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(volta_home) = std::env::var("VOLTA_HOME") {
+        dirs.push(PathBuf::from(volta_home).join("bin"));
+    }
+    dirs.push(home.join(".volta/bin"));
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        dirs.push(PathBuf::from(localappdata).join("Volta/bin"));
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        dirs.push(PathBuf::from(appdata).join("Volta/bin"));
+    }
+    dirs
 }
 
 fn command_variants(command: &str) -> Vec<String> {
@@ -878,6 +1008,35 @@ fn locate_node_exe() -> Option<PathBuf> {
         for dir in std::env::split_paths(&path) {
             candidates.push(dir.join("node.exe"));
         }
+    }
+
+    // fnm / volta candidates
+    if let Ok(home) = std::env::var("HOME") {
+        let hp = Path::new(&home);
+        for dir in fnm_bin_dirs(hp).into_iter().chain(volta_bin_dirs(hp)) {
+            candidates.push(dir.join("node.exe"));
+        }
+    }
+    if let Ok(userprofile) = std::env::var("USERPROFILE") {
+        let up = Path::new(&userprofile);
+        for dir in fnm_bin_dirs(up).into_iter().chain(volta_bin_dirs(up)) {
+            candidates.push(dir.join("node.exe"));
+        }
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        candidates.push(PathBuf::from(&appdata).join("fnm/aliases/default/node.exe"));
+        candidates.push(PathBuf::from(&appdata).join("fnm/aliases/default/bin/node.exe"));
+    }
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(&localappdata).join("fnm/aliases/default/node.exe"));
+        candidates.push(PathBuf::from(&localappdata).join("Volta/bin/node.exe"));
+    }
+    if let Ok(fnm_dir) = std::env::var("FNM_DIR") {
+        candidates.push(PathBuf::from(&fnm_dir).join("aliases/default/node.exe"));
+        candidates.push(PathBuf::from(&fnm_dir).join("aliases/default/bin/node.exe"));
+    }
+    if let Ok(multishell) = std::env::var("FNM_MULTISHELL_PATH") {
+        candidates.push(PathBuf::from(multishell).join("node.exe"));
     }
 
     if let Ok(program_files) = std::env::var("ProgramFiles") {
@@ -1179,12 +1338,38 @@ pub(crate) fn extended_path() -> String {
     }
 
     if let Ok(home) = std::env::var("HOME") {
+        let home_path = Path::new(&home);
+        parts.extend(fnm_bin_dirs(home_path));
+        parts.extend(volta_bin_dirs(home_path));
         parts.push(PathBuf::from(&home).join(".npm-global/bin"));
         parts.push(PathBuf::from(&home).join(".local/bin"));
+        parts.push(PathBuf::from(&home).join(".nvm/current/bin"));
+    }
+    if let Ok(userprofile) = std::env::var("USERPROFILE") {
+        let up = Path::new(&userprofile);
+        parts.extend(fnm_bin_dirs(up));
+        parts.extend(volta_bin_dirs(up));
+    }
+    if let Ok(fnm_dir) = std::env::var("FNM_DIR") {
+        if !fnm_dir.is_empty() {
+            parts.push(PathBuf::from(fnm_dir).join("aliases/default/bin"));
+        }
+    }
+    if let Ok(multishell) = std::env::var("FNM_MULTISHELL_PATH") {
+        if !multishell.is_empty() {
+            parts.push(PathBuf::from(multishell));
+        }
+    }
+    if let Ok(volta_home) = std::env::var("VOLTA_HOME") {
+        parts.push(PathBuf::from(volta_home).join("bin"));
     }
 
     if let Ok(appdata) = std::env::var("APPDATA") {
         parts.push(PathBuf::from(appdata).join("npm"));
+    }
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        parts.push(PathBuf::from(&localappdata).join("fnm").join("aliases/default/bin"));
+        parts.push(PathBuf::from(&localappdata).join("Volta").join("bin"));
     }
 
     #[cfg(target_os = "windows")]
@@ -1196,7 +1381,11 @@ pub(crate) fn extended_path() -> String {
     parts.push(PathBuf::from("/usr/local/bin"));
     parts.push(PathBuf::from("/usr/bin"));
 
-    std::env::join_paths(parts)
+    // Dedup while preserving order
+    let mut seen = std::collections::HashSet::new();
+    let deduped: Vec<PathBuf> = parts.into_iter().filter(|p| seen.insert(p.clone())).collect();
+
+    std::env::join_paths(deduped)
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_default()
 }
