@@ -1,5 +1,16 @@
 # DECISIONS
 
+Fecha: 2026-09-16
+Decisión: Publicar la correccion de cuotas como v1.0.9.
+Motivo: El usuario solicita actualizar GitHub con una nueva version y sus notas; el actualizador necesita un incremento de version.
+Impacto: Notas bilingues, manifests y lockfiles sincronizados; se conserva el workflow de releases y no se agregan dependencias.
+
+Fecha: 2026-09-16
+Decisión: Leer las columnas tabuladas de codex-auth 0.3.0 por encabezado y conservar el formato legado.
+Motivo: 0.3.0 agrega CREDITS/RESET CREDITS y renombra 5H USAGE/WEEKLY USAGE a 5H/WEEKLY; el parser anterior confundia creditos con cuotas.
+Alternativas descartadas: Migrar toda la integracion a JSON en este hotfix, porque requiere mapear resets, actividad y estados de refresco y mantener compatibilidad con versiones antiguas sin JSON.
+Impacto: Recupera las cuotas actuales con un cambio localizado. Filas incompletas y errores de autorizacion no habilitan candidatas ni disparan auto-switch por agotamiento. La tabla sigue siendo una dependencia de formato externo.
+
 Fecha: 2026-09-02
 Decisión: Publicar la compatibilidad de relanzamiento con ChatGPT Desktop como `v1.0.8`.
 Motivo: El cambio corrige un comportamiento visible despues de seleccionar una cuenta y debe llegar mediante el actualizador firmado con notas bilingues.

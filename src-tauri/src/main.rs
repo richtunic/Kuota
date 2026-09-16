@@ -896,6 +896,15 @@ fn locate_node_exe() -> Option<PathBuf> {
 }
 
 fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
+    // 0.3 uses padded columns, adds credits, and shortens the usage headers.
+    let columns = output.lines().find_map(|line| {
+        let columns: Vec<&str> = line
+            .split("  ")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        (columns.contains(&"ACCOUNT") && columns.contains(&"WEEKLY")).then_some(columns)
+    });
     let has_five_hour_column = output
         .lines()
         .any(|line| line.to_ascii_uppercase().contains("5H USAGE"));
@@ -908,6 +917,30 @@ fn parse_codex_auth_accounts(output: &str) -> Vec<CodexAuthAccount> {
                 .iter()
                 .position(|part| part.contains('@') && part.contains('.'))?;
             let email = tokens[email_index].to_string();
+            if let Some(columns) = &columns {
+                let values: Vec<&str> = line
+                    .split("  ")
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                // Never interpret a shifted or incomplete row as available quota.
+                let field = |name: &str| {
+                    (values.len() == columns.len())
+                        .then(|| columns.iter().position(|column| *column == name))
+                        .flatten()
+                        .and_then(|index| values.get(index))
+                        .map(|value| value.to_string())
+                };
+                return Some(CodexAuthAccount {
+                    email,
+                    active: line.trim_start().starts_with('*'),
+                    plan: field("PLAN"),
+                    five_hour_usage: field("5H"),
+                    weekly_usage: field("WEEKLY"),
+                    last_activity: field("LAST ACTIVITY"),
+                    raw: line.trim().to_string(),
+                });
+            }
             let plan = tokens.get(email_index + 1).map(|value| value.to_string());
             let usage_index = email_index + 2;
             let five_hour_usage = has_five_hour_column
@@ -957,6 +990,41 @@ mod tests {
             last_activity: None,
             raw: String::new(),
         }
+    }
+
+    #[test]
+    fn parses_v030_columns_without_confusing_credits_with_usage() {
+        let output = "     ACCOUNT  PLAN  CREDITS  RESET CREDITS  5H  WEEKLY  LAST ACTIVITY\n\
+                      * 01 plus@example.com  Plus  0  3  93% (16:38)  81% (14:10 on 20 Sep)  Now\n\
+                        02 free@example.com  Free  401 unauthorized_unknown  401 unauthorized_unknown  401 unauthorized_unknown  401 unauthorized_unknown  56d ago";
+        let accounts = parse_codex_auth_accounts(output);
+        assert_eq!(accounts.len(), 2);
+        assert!(accounts[0].active);
+        assert_eq!(accounts[0].five_hour_usage.as_deref(), Some("93% (16:38)"));
+        assert_eq!(
+            accounts[0].weekly_usage.as_deref(),
+            Some("81% (14:10 on 20 Sep)")
+        );
+        assert_eq!(accounts[0].last_activity.as_deref(), Some("Now"));
+        assert!(available_quota_score(&accounts[0]).is_some());
+        assert_eq!(
+            accounts[1].weekly_usage.as_deref(),
+            Some("401 unauthorized_unknown")
+        );
+        assert_eq!(accounts[1].last_activity.as_deref(), Some("56d ago"));
+        assert_eq!(available_quota_score(&accounts[1]), None);
+        assert!(!has_exhausted_applicable_quota(&accounts[1]));
+    }
+
+    #[test]
+    fn rejects_incomplete_v030_rows() {
+        let accounts = parse_codex_auth_accounts(
+            "ACCOUNT  PLAN  CREDITS  RESET CREDITS  5H  WEEKLY  LAST ACTIVITY\n\
+             * 01 plus@example.com  Plus  100  3  81% (5d)  Now",
+        );
+        assert_eq!(accounts[0].weekly_usage, None);
+        assert_eq!(available_quota_score(&accounts[0]), None);
+        assert!(!has_exhausted_applicable_quota(&accounts[0]));
     }
 
     #[test]

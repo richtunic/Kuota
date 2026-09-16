@@ -1,5 +1,15 @@
 # CHANGELOG_AI
 
+Fecha: 2026-09-16
+Tarea: Publicar Kuota 1.0.9
+Cambios: Version 1.0.9 en manifests, lockfiles y Acerca de; notas bilingues en docs/releases/v1.0.9.md para la correccion de cuotas con codex-auth 0.3.0. Publicacion mediante commit/tag/push y workflow existente para macOS universal y Windows x64.
+
+Fecha: 2026-09-16
+Tarea: Corregir cuotas con codex-auth 0.3.0
+Cambios: El parser identifica las columnas 5H/WEEKLY por encabezado y separa los campos tabulados, incluidos errores de varias palabras; conserva el parser de 0.2.x. Rechaza cuotas de filas incompletas para evitar cambios automaticos con datos desplazados.
+Validación: 9 pruebas Rust, build TypeScript/Vite y lint correctos. El parser extraido del codigo se probo con codex-auth list real: ambas cuentas Plus devolvieron porcentajes; Free devolvio 401 unauthorized_unknown.
+Seguridad: Sin dependencias nuevas, sin exponer tokens ni modificar la logica de autenticacion.
+
 Fecha: 2026-09-02
 Tarea: Preparar Kuota 1.0.8 con relanzamiento compatible con ChatGPT Desktop
 Cambios:

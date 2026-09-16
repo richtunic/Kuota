@@ -1,5 +1,19 @@
 # HANDOFF
 
+## Actualización 2026-09-16: release 1.0.9
+
+- Version sincronizada en npm, Cargo, Tauri y Acerca de. Notas bilingues: docs/releases/v1.0.9.md.
+- Validacion 1.0.9: npm run build, npm run lint, cargo fmt --check, cargo test --locked (9 pruebas) y git diff --check correctos.
+- Publicacion autorizada: commit en main, tag v1.0.9 y push; comprobar Actions, instaladores y latest.json antes de confirmar disponibilidad.
+- CLAUDE.md permanece fuera del commit por ser un archivo ajeno sin seguimiento.
+
+## Actualización 2026-09-16: cuotas codex-auth 0.3.0
+
+- Causa verificada: columnas nuevas de creditos y encabezados 5H/WEEKLY desalineaban el parser de Kuota 1.0.8.
+- Correccion en src-tauri/src/main.rs; conserva compatibilidad con 0.2.x, valida numero de columnas y mantiene errores completos.
+- Validado con 9 pruebas Rust, build frontend/tipado, lint y consulta real pasada al parser extraido del codigo. Dos cuentas Plus tienen cuotas; una Free requiere resolver 401 unauthorized_unknown por separado.
+- Inspeccion visual bloqueada por timeout de Computer Use. No se ha publicado una release nueva.
+
 ## Actualización 2026-09-02: release 1.0.8 preparada
 
 - Version actualizada a `1.0.8` en npm, Cargo, Tauri y el modal Acerca de Kuota.
