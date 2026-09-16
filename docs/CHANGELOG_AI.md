@@ -3,6 +3,7 @@
 Fecha: 2026-09-16
 Tarea: Publicar Kuota 1.0.9
 Cambios: Version 1.0.9 en manifests, lockfiles y Acerca de; notas bilingues en docs/releases/v1.0.9.md para la correccion de cuotas con codex-auth 0.3.0. Publicacion mediante commit/tag/push y workflow existente para macOS universal y Windows x64.
+Resultado: v1.0.9 publicada desde 1dee05a; workflow 35136661281 exitoso en ambas plataformas. Assets y manifiesto latest.json verificados.
 
 Fecha: 2026-09-16
 Tarea: Corregir cuotas con codex-auth 0.3.0

@@ -4,7 +4,8 @@
 
 - Version sincronizada en npm, Cargo, Tauri y Acerca de. Notas bilingues: docs/releases/v1.0.9.md.
 - Validacion 1.0.9: npm run build, npm run lint, cargo fmt --check, cargo test --locked (9 pruebas) y git diff --check correctos.
-- Publicacion autorizada: commit en main, tag v1.0.9 y push; comprobar Actions, instaladores y latest.json antes de confirmar disponibilidad.
+- Publicada: commit 1dee05a, tag v1.0.9 y push a main. Workflow 35136661281 completado correctamente en macOS universal y Windows x64.
+- Release: https://github.com/richtunic/Kuota/releases/tag/v1.0.9. Verificados DMG, app.tar.gz, EXE, MSI, firmas y latest.json version 1.0.9 con entradas para macOS Intel/Apple Silicon y Windows x64.
 - CLAUDE.md permanece fuera del commit por ser un archivo ajeno sin seguimiento.
 
 ## Actualización 2026-09-16: cuotas codex-auth 0.3.0
