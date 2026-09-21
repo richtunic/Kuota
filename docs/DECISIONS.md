@@ -11,6 +11,12 @@ Motivo: 0.3.0 agrega CREDITS/RESET CREDITS y renombra 5H USAGE/WEEKLY USAGE a 5H
 Alternativas descartadas: Migrar toda la integracion a JSON en este hotfix, porque requiere mapear resets, actividad y estados de refresco y mantener compatibilidad con versiones antiguas sin JSON.
 Impacto: Recupera las cuotas actuales con un cambio localizado. Filas incompletas y errores de autorizacion no habilitan candidatas ni disparan auto-switch por agotamiento. La tabla sigue siendo una dependencia de formato externo.
 
+Fecha: 2026-09-21
+Decisión: Corregir detección de `npm`/`node` para usuarios con `fnm` (y `volta`) como `v1.0.10`.
+Motivo: `fnm` inyecta `PATH` solo en shells via `eval "$(fnm env)"`; la app GUI hereda `PATH` de `launchd/explorer` sin `fnm`, por lo que `locate_command("npm")` fallaba con "npm no está instalado" aunque `npm` existiera en `FNM_DIR/aliases/default` o `FNM_MULTISHELL_PATH`.
+Alternativas descartadas: Ejecutar `bash -l -c 'which npm'` para heredar rc del usuario, porque es lento y depende de shell/config; usar `fnm exec` como única vía, porque requiere localizar `fnm` primero y no cubre `volta`/instalaciones sin `FNM_DIR`.
+Impacto: `locate_command`, `locate_node_exe`, `extended_path` y helpers `fnm_bin_dirs`/`volta_bin_dirs` cubren `APPDATA/fnm`, `LOCALAPPDATA/fnm`, `~/.local/share/fnm`, `~/.fnm` y variantes `aliases/default` vs `aliases/default/bin` + `node-versions/*/installation`; se actualizan manifests a `1.0.10`, modal Acerca y `docs/releases/v1.0.10.md`; no se agregan dependencias ni se exponen secretos.
+
 Fecha: 2026-09-02
 Decisión: Publicar la compatibilidad de relanzamiento con ChatGPT Desktop como `v1.0.8`.
 Motivo: El cambio corrige un comportamiento visible despues de seleccionar una cuenta y debe llegar mediante el actualizador firmado con notas bilingues.

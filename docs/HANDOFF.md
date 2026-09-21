@@ -15,6 +15,13 @@
 - Validado con 9 pruebas Rust, build frontend/tipado, lint y consulta real pasada al parser extraido del codigo. Dos cuentas Plus tienen cuotas; una Free requiere resolver 401 unauthorized_unknown por separado.
 - Inspeccion visual bloqueada por timeout de Computer Use. No se ha publicado una release nueva.
 
+## Actualización 2026-09-21: fix fnm/volta rebaseado sobre 1.0.9 → 1.0.10
+
+- Encontré que no era compatible al 100% con `fnm`: "npm no está instalado o no está en PATH" aunque `fnm list` mostrara `default`. Causa: `fnm` solo modifica `PATH` en shells, la GUI Tauri hereda `PATH` limpio.
+- Parche en `src-tauri/src/main.rs` (`locate_command`, `extended_path`, `locate_node_exe` + helpers `fnm_bin_dirs`/`volta_bin_dirs`): cubre `FNM_DIR`, `FNM_MULTISHELL_PATH`, `APPDATA/fnm`, `LOCALAPPDATA/fnm`, `~/.local/share/fnm`, `~/.fnm` y ambas variantes `aliases/default` y `aliases/default/bin` + `node-versions/*/installation`.
+- Rebase sobre `upstream/main` fe1c5ca: `main.rs` fusionó limpio (fnm + parser 0.3.0 conviven), solo hubo conflicto en docs por doble v1.0.9 → se mueve a `v1.0.10`.
+- Version bump a `1.0.10` en `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json` y `App.tsx`.
+
 ## Actualización 2026-09-02: release 1.0.8 preparada
 
 - Version actualizada a `1.0.8` en npm, Cargo, Tauri y el modal Acerca de Kuota.

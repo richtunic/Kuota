@@ -11,6 +11,31 @@ Cambios: El parser identifica las columnas 5H/WEEKLY por encabezado y separa los
 Validación: 9 pruebas Rust, build TypeScript/Vite y lint correctos. El parser extraido del codigo se probo con codex-auth list real: ambas cuentas Plus devolvieron porcentajes; Free devolvio 401 unauthorized_unknown.
 Seguridad: Sin dependencias nuevas, sin exponer tokens ni modificar la logica de autenticacion.
 
+Fecha: 2026-09-21
+Tarea: Fix detección npm/node para fnm y volta (rebase sobre 1.0.9)
+Cambios:
+- `src-tauri/src/main.rs` ahora resuelve `npm`/`node` via `fnm`/`volta` aunque la GUI no herede `PATH` del shell. Nuevos helpers `fnm_bin_dirs`/`volta_bin_dirs` cubren `FNM_DIR`, `FNM_MULTISHELL_PATH`, `APPDATA/fnm`, `LOCALAPPDATA/fnm`, `~/.local/share/fnm`, `~/.fnm` y layouts `aliases/default` (Windows) vs `aliases/default/bin` (Unix) + `node-versions/*/installation`.
+- `locate_command` y `extended_path` incluyen esos bins; `locate_node_exe` en Windows también los usa para `resolve_npm_cli`.
+- Rebase sobre `upstream/main` fe1c5ca (v1.0.9 codex-auth 0.3): `main.rs` fusionó limpio, solo hubo conflicto en docs por doble v1.0.9.
+- Version bump `1.0.9` → `1.0.10` en `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `src/App.tsx`.
+Archivos:
+- `src-tauri/src/main.rs`
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+- `src/App.tsx`
+- `docs/releases/v1.0.10.md` (nuevo)
+- `docs/CHANGELOG_AI.md`
+- `docs/DECISIONS.md`
+- `docs/HANDOFF.md`
+Validación:
+- `npm run build` OK
+- `cargo test` OK
+Notas:
+- Instalación de prueba: cerrar Kuota previo, verificar `fnm list` y que `Buscar actualizaciones` ya no muestre "npm no está en PATH".
+
 Fecha: 2026-09-02
 Tarea: Preparar Kuota 1.0.8 con relanzamiento compatible con ChatGPT Desktop
 Cambios:
