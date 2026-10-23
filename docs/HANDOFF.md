@@ -5,7 +5,7 @@
 - Version 1.0.10 sincronizada en npm, Cargo, Tauri y Acerca de Kuota.
 - Notas bilingües en `docs/releases/v1.0.10.md` describen los fixes de cuenta activa, cuentas ocultas persistentes y refresco después de device auth.
 - Validado: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check`.
-- Pendiente: commit, tag `v1.0.10`, push de `main` y tag, y revisión de GitHub Actions/Release.
+- Publicada: commit `a90e959`, tag `v1.0.10` y rama `main` sincronizados en GitHub. Workflow 39907796704 completado correctamente; Release verificada con notas bilingües y assets de macOS universal/Windows x64, incluidos firmas y `latest.json`.
 
 ## Actualización 2026-10-22: estado activo y borrado persistente de cuentas
 
@@ -17,7 +17,7 @@
 
 - El evento `LoginSucceeded` ahora usa los reintentos de refresco de cuentas a 0, 5, 15 y 45 segundos. Esto cubre el retraso entre la confirmación de device auth y la disponibilidad de la cuenta en `codex-auth list`.
 - El modal conserva el cierre automático a los 1.8 segundos; los refrescos posteriores continúan en segundo plano.
-- `npm run build`, `npm run lint` y `cargo fmt --check` pasaron. `cargo check` quedo pendiente porque el sandbox no permite escribir en `~/.cargo/registry` al descargar una dependencia; no se modifico ese cache.
+- `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked` y `cargo test --locked` (9 pruebas) pasaron.
 
 ## Actualización 2026-09-16: release 1.0.9
 

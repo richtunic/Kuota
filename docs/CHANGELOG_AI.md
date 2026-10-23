@@ -3,7 +3,7 @@
 Fecha: 2026-10-22
 Tarea: Preparar release Kuota 1.0.10
 Cambios: Version sincronizada en los manifests, lockfiles y el modal Acerca de. `docs/releases/v1.0.10.md` documenta en español e inglés las correcciones de cuenta activa, cuentas ocultas y refresco después del login por código.
-Validacion: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check` pasaron. Pendiente publicar commit y tag `v1.0.10`.
+Validacion: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check` pasaron. Commit `a90e959` y tag `v1.0.10` publicados en GitHub; workflow 39907796704 completado correctamente para macOS universal y Windows x64. Release pública verificada con notas bilingües y ocho assets, incluido `latest.json`.
 Seguridad: Sin cambios en credenciales, sesiones ni dependencias.
 
 Fecha: 2026-10-22
@@ -17,7 +17,7 @@ Fecha: 2026-10-22
 Tarea: Corregir el refresco de cuentas tras login por codigo
 Cambios: Al completar un login nativo de Codex, Kuota vuelve a consultar las cuentas a los 0, 5, 15 y 45 segundos para cubrir el retraso entre la confirmacion del navegador y la disponibilidad de la cuenta en `codex-auth list`. El modal conserva su cierre automatico.
 Archivos: `src/store/useStore.ts`, `docs/CHANGELOG_AI.md`, `docs/DECISIONS.md`, `docs/HANDOFF.md`.
-Validacion: `npm run build`, `npm run lint` y `cargo fmt --check` pasaron. `cargo check` no pudo completar porque Cargo no pudo escribir el crate cache fuera del workspace (`~/.cargo/registry`); no se modifico ese cache.
+Validacion: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked` y `cargo test --locked` (9 pruebas) pasaron.
 Seguridad: Sin cambios en credenciales, almacenamiento de sesiones ni dependencias.
 
 Fecha: 2026-09-16
