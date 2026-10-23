@@ -1,5 +1,24 @@
 # HANDOFF
 
+## Actualización 2026-10-22: preparación de release 1.0.10
+
+- Version 1.0.10 sincronizada en npm, Cargo, Tauri y Acerca de Kuota.
+- Notas bilingües en `docs/releases/v1.0.10.md` describen los fixes de cuenta activa, cuentas ocultas persistentes y refresco después de device auth.
+- Validado: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check`.
+- Pendiente: commit, tag `v1.0.10`, push de `main` y tag, y revisión de GitHub Actions/Release.
+
+## Actualización 2026-10-22: estado activo y borrado persistente de cuentas
+
+- `activeAccountId` se deriva ahora únicamente de la cuenta que `codex-auth` marca activa; el valor ya no se persiste entre arranques y se borra durante la migración del estado local.
+- Al borrar una cuenta detectada por `codex-auth`, Kuota resuelve el correo desde el objeto combinado, la lista configurada o el ID `codex-auth-*`, y normaliza las claves ocultas existentes.
+- `npm run build`, `npm run lint` y `git diff --check` pasaron.
+
+## Actualización 2026-10-22: refresco de cuentas tras login por código
+
+- El evento `LoginSucceeded` ahora usa los reintentos de refresco de cuentas a 0, 5, 15 y 45 segundos. Esto cubre el retraso entre la confirmación de device auth y la disponibilidad de la cuenta en `codex-auth list`.
+- El modal conserva el cierre automático a los 1.8 segundos; los refrescos posteriores continúan en segundo plano.
+- `npm run build`, `npm run lint` y `cargo fmt --check` pasaron. `cargo check` quedo pendiente porque el sandbox no permite escribir en `~/.cargo/registry` al descargar una dependencia; no se modifico ese cache.
+
 ## Actualización 2026-09-16: release 1.0.9
 
 - Version sincronizada en npm, Cargo, Tauri y Acerca de. Notas bilingues: docs/releases/v1.0.9.md.

@@ -1,5 +1,25 @@
 # CHANGELOG_AI
 
+Fecha: 2026-10-22
+Tarea: Preparar release Kuota 1.0.10
+Cambios: Version sincronizada en los manifests, lockfiles y el modal Acerca de. `docs/releases/v1.0.10.md` documenta en español e inglés las correcciones de cuenta activa, cuentas ocultas y refresco después del login por código.
+Validacion: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check` pasaron. Pendiente publicar commit y tag `v1.0.10`.
+Seguridad: Sin cambios en credenciales, sesiones ni dependencias.
+
+Fecha: 2026-10-22
+Tarea: Corregir cuenta activa incorrecta y cuentas ocultas que reaparecen
+Cambios: La cuenta activa ahora se deriva del estado vigente de `codex-auth` y deja de conservarse en almacenamiento local como una preferencia. Al borrar una cuenta detectada, Kuota también puede recuperar el correo desde el ID `codex-auth-*`; las claves ocultas existentes se normalizan durante la migracion.
+Archivos: `src/store/useStore.ts`, `docs/CHANGELOG_AI.md`, `docs/DECISIONS.md`, `docs/HANDOFF.md`.
+Validacion: `npm run build`, `npm run lint` y `git diff --check` pasaron.
+Seguridad: No se modifican credenciales ni el almacenamiento de sesiones de Codex; no se agregan dependencias.
+
+Fecha: 2026-10-22
+Tarea: Corregir el refresco de cuentas tras login por codigo
+Cambios: Al completar un login nativo de Codex, Kuota vuelve a consultar las cuentas a los 0, 5, 15 y 45 segundos para cubrir el retraso entre la confirmacion del navegador y la disponibilidad de la cuenta en `codex-auth list`. El modal conserva su cierre automatico.
+Archivos: `src/store/useStore.ts`, `docs/CHANGELOG_AI.md`, `docs/DECISIONS.md`, `docs/HANDOFF.md`.
+Validacion: `npm run build`, `npm run lint` y `cargo fmt --check` pasaron. `cargo check` no pudo completar porque Cargo no pudo escribir el crate cache fuera del workspace (`~/.cargo/registry`); no se modifico ese cache.
+Seguridad: Sin cambios en credenciales, almacenamiento de sesiones ni dependencias.
+
 Fecha: 2026-09-16
 Tarea: Publicar Kuota 1.0.9
 Cambios: Version 1.0.9 en manifests, lockfiles y Acerca de; notas bilingues en docs/releases/v1.0.9.md para la correccion de cuotas con codex-auth 0.3.0. Publicacion mediante commit/tag/push y workflow existente para macOS universal y Windows x64.

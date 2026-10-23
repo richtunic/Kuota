@@ -103,7 +103,7 @@ function mergeAccounts(
   hiddenAccountKeys: string[] = [],
 ): AccountUsage[] {
   const codexAccounts = codexAuth?.accounts ?? []
-  const hidden = new Set(hiddenAccountKeys)
+  const hidden = new Set(hiddenAccountKeys.map(normalizeKey))
   const visibleCodexAccounts = codexAccounts.filter((account) => !hidden.has(normalizeKey(account.email)))
   const visibleConfigured = configured.filter((account) => !hidden.has(normalizeKey(account.email) || account.id))
   const configuredWithAuth = mergeConfiguredWithCodexAuth(visibleConfigured, visibleCodexAccounts)
@@ -255,10 +255,9 @@ function handleCodexLoginEvent(
         message: event.message ?? 'Cuenta agregada correctamente.',
       },
     }))
-    get().refreshCodexAuth()
+    scheduleLoginRefreshes(get().refreshCodexAuth)
     window.setTimeout(() => {
       get().dismissLoginAccount()
-      get().refreshCodexAuth()
     }, 1800)
     return
   }
@@ -322,7 +321,7 @@ export const useStore = create<AppState>()(
         const hiddenAccountKeys = state.hiddenAccountKeys.filter((key) => key !== normalizeKey(nextAccount.email))
         return {
           accounts,
-          activeAccountId: state.activeAccountId ?? nextAccount.id,
+          activeAccountId: activeIdFromStatus(state.codexAuth, accounts, hiddenAccountKeys),
           hiddenAccountKeys,
           mergedAccounts: mergeAccounts(accounts, state.codexAuth, hiddenAccountKeys),
         }
@@ -344,7 +343,8 @@ export const useStore = create<AppState>()(
     deleteAccount: (id) => {
       set((state) => {
         const target = state.mergedAccounts.find((account) => account.configured.id === id)?.configured
-        const hiddenKey = normalizeKey(target?.email) || id
+          ?? state.accounts.find((account) => account.id === id)
+        const hiddenKey = normalizeKey(target?.email) || normalizeKey(id.replace(/^codex-auth-/, ''))
         const hiddenAccountKeys = hiddenKey
           ? Array.from(new Set([...state.hiddenAccountKeys, hiddenKey]))
           : state.hiddenAccountKeys
@@ -354,7 +354,7 @@ export const useStore = create<AppState>()(
         return {
           accounts,
           hiddenAccountKeys,
-          activeAccountId: state.activeAccountId === id ? mergedAccounts[0]?.configured.id ?? null : state.activeAccountId,
+          activeAccountId: activeIdFromStatus(state.codexAuth, accounts, hiddenAccountKeys),
           mergedAccounts,
         }
       })
@@ -369,7 +369,7 @@ export const useStore = create<AppState>()(
           set((state) => ({
             autoSwitchEnabled: enabled,
             codexAuth: status,
-            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys),
             lastSync: new Date(),
             lastAutoSwitchEmail: enabled ? state.lastAutoSwitchEmail : null,
             mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
@@ -389,7 +389,7 @@ export const useStore = create<AppState>()(
           })
           set((state) => ({
           codexAuth: status,
-          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? account.id,
+          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys),
           lastSync: new Date(),
           mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
         }))
@@ -492,7 +492,7 @@ export const useStore = create<AppState>()(
           const status = await invoke<CodexAuthStatus>('codex_auth_status')
           set((state) => ({
             codexAuth: status,
-            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys),
             lastSync: new Date(),
             mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
           }))
@@ -510,7 +510,7 @@ export const useStore = create<AppState>()(
                 const activeEmail = activeEmailFromStatus(switched)
                 set((state) => ({
                   codexAuth: switched,
-                  activeAccountId: activeIdFromStatus(switched, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+                  activeAccountId: activeIdFromStatus(switched, state.accounts, state.hiddenAccountKeys),
                   lastAutoSwitchEmail: activeEmail || state.lastAutoSwitchEmail,
                   lastSync: new Date(),
                   mergedAccounts: mergeAccounts(state.accounts, switched, state.hiddenAccountKeys),
@@ -531,7 +531,7 @@ export const useStore = create<AppState>()(
           const status = await invoke<CodexAuthStatus>('ensure_codex_auth')
           set((state) => ({
           codexAuth: status,
-          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys),
           lastSync: new Date(),
           mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
         }))
@@ -549,7 +549,7 @@ export const useStore = create<AppState>()(
         const status = await invoke<CodexAuthStatus>('ensure_codex_auth')
         set((state) => ({
           codexAuth: status,
-          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys) ?? state.activeAccountId,
+          activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys),
           lastSync: new Date(),
           mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
         }))
@@ -700,26 +700,23 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'gpt-router-store',
-      version: 6,
+      version: 7,
       migrate: (persistedState: unknown) => {
         const state = persistedState as Partial<AppState> | undefined
-        if (!state?.accounts) return persistedState
+        if (!state) return persistedState
 
-        const accounts = dedupeConfiguredAccounts(removeDemoAccounts(state.accounts))
+        const accounts = dedupeConfiguredAccounts(removeDemoAccounts(state.accounts ?? []))
         return {
           ...state,
           accounts,
-          activeAccountId: accounts.some((account) => account.id === state.activeAccountId)
-            ? state.activeAccountId
-            : accounts[0]?.id ?? null,
+          activeAccountId: null,
           language: state.language ?? 'es',
           autoSwitchEnabled: state.autoSwitchEnabled ?? false,
-          hiddenAccountKeys: state.hiddenAccountKeys ?? [],
+          hiddenAccountKeys: (state.hiddenAccountKeys ?? []).map(normalizeKey).filter(Boolean),
         }
       },
       partialize: (state) => ({
         accounts: state.accounts,
-        activeAccountId: state.activeAccountId,
         hiddenAccountKeys: state.hiddenAccountKeys,
         language: state.language,
       }),
@@ -734,7 +731,7 @@ function activeIdFromStatus(
 ): string | null {
   const activeEmail = status.accounts.find((account) => account.active)?.email
   const key = normalizeKey(activeEmail)
-  if (!key || hiddenAccountKeys.includes(key)) return null
+  if (!key || hiddenAccountKeys.map(normalizeKey).includes(key)) return null
   return accounts.find((account) => normalizeKey(account.email) === key)?.id ?? `codex-auth-${key}`
 }
 

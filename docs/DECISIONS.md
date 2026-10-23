@@ -1,5 +1,23 @@
 # DECISIONS
 
+Fecha: 2026-10-22
+Decisión: Publicar las correcciones de cuenta activa, ocultamiento persistente y refresco de login como Kuota `1.0.10`.
+Motivo: Son correcciones visibles que deben llegar a usuarios instalados mediante el actualizador firmado.
+Alternativas descartadas: Mantener la versión `1.0.9`, porque los clientes no detectarían la actualización.
+Impacto: Versiones sincronizadas en npm, Cargo, Tauri y Acerca de Kuota; notas bilingües en `docs/releases/v1.0.10.md`; el tag `v1.0.10` dispara builds oficiales de macOS y Windows.
+
+Fecha: 2026-10-22
+Decisión: Tratar el marcador activo reportado por `codex-auth` como fuente de verdad y persistir los borrados de cuentas detectadas por correo normalizado.
+Motivo: Conservar un `activeAccountId` anterior podia marcar como activa otra cuenta cuando el estado actual no encontraba una coincidencia; borrar una cuenta detectada por un ID sin poder resolver su correo podia dejarla visible despues del siguiente refresco.
+Alternativas descartadas: Mantener la ultima cuenta activa localmente, porque puede contradecir a Codex; eliminar la cuenta de `codex-auth`, porque el usuario pidio ocultarla de Kuota y esa accion afectaria la autenticacion.
+Impacto: La marca activa se recalcula desde cada respuesta actual, no se guarda como preferencia y las cuentas ocultas siguen filtradas aunque se resuelvan desde IDs generados por Kuota.
+
+Fecha: 2026-10-22
+Decisión: Reintentar la lectura de cuentas durante 45 segundos despues de completar el login nativo.
+Motivo: La confirmacion de device auth en el navegador puede preceder a que `codex-auth list` refleje la cuenta; unicamente consultar en ese instante y 1.8 segundos despues podia dejar Kuota sin mostrarla hasta el polling de un minuto.
+Alternativas descartadas: Cambiar el login o guardar tokens manualmente, porque `codex-auth` sigue siendo la fuente de autenticacion y ya informa el exito del flujo.
+Impacto: Kuota refresca al momento y a los 5, 15 y 45 segundos tras el exito; no cambia la gestion de credenciales.
+
 Fecha: 2026-09-16
 Decisión: Publicar la correccion de cuotas como v1.0.9.
 Motivo: El usuario solicita actualizar GitHub con una nueva version y sus notas; el actualizador necesita un incremento de version.
