@@ -1,5 +1,12 @@
 # HANDOFF
 
+## Actualización 2026-10-22: hotfix 1.0.11 para cuenta recién autenticada
+
+- Al iniciar el login, Kuota registra los correos ya conocidos por `codex-auth`; después del éxito revela la cuenta activa y las cuentas nuevas que detecte, aunque una clave local las haya ocultado previamente.
+- Las demás cuentas borradas siguen ocultas; no se elimina ni modifica la sesión almacenada por Codex.
+- Validación local: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check` pasaron.
+- Pendiente: commit, tag `v1.0.11`, push y verificación del workflow/Release de GitHub.
+
 ## Actualización 2026-10-22: preparación de release 1.0.10
 
 - Version 1.0.10 sincronizada en npm, Cargo, Tauri y Acerca de Kuota.

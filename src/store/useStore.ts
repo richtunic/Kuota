@@ -69,7 +69,7 @@ interface AppState {
   cancelLoginAccount: () => Promise<void>
   openLoginAuthorizationUrl: () => Promise<void>
   dismissLoginAccount: () => void
-  refreshCodexAuth: () => Promise<void>
+  refreshCodexAuth: (revealLoginAccounts?: boolean) => Promise<void>
   ensureCodexAuth: () => Promise<void>
   checkAllUpdates: () => Promise<void>
   checkForAppUpdate: (silent?: boolean) => Promise<void>
@@ -83,6 +83,7 @@ interface AppState {
 let initialized = false
 let pendingTauriUpdate: Update | null = null
 let autoSwitchInFlight = false
+let loginAccountBaselineEmails: Set<string> | null = null
 const isWindows = () => /win/i.test(navigator.platform)
 const isMac = () => /mac/i.test(navigator.platform)
 const hasNativeLoginModal = () => isWindows() || isMac()
@@ -255,7 +256,7 @@ function handleCodexLoginEvent(
         message: event.message ?? 'Cuenta agregada correctamente.',
       },
     }))
-    scheduleLoginRefreshes(get().refreshCodexAuth)
+    scheduleLoginRefreshes(() => get().refreshCodexAuth(true))
     window.setTimeout(() => {
       get().dismissLoginAccount()
     }, 1800)
@@ -402,6 +403,17 @@ export const useStore = create<AppState>()(
 
       loginAccount: async () => {
         set({ error: null })
+        let baselineStatus = get().codexAuth
+        if (!baselineStatus) {
+          try {
+            baselineStatus = await invoke<CodexAuthStatus>('codex_auth_status')
+          } catch {
+            baselineStatus = null
+          }
+        }
+        loginAccountBaselineEmails = new Set(
+          (baselineStatus?.accounts ?? []).map((account) => normalizeKey(account.email)).filter(Boolean),
+        )
         if (hasNativeLoginModal()) {
           set({
             codexLogin: {
@@ -416,7 +428,7 @@ export const useStore = create<AppState>()(
         try {
           await invoke('codex_auth_login', { deviceAuth: true })
           if (!hasNativeLoginModal()) {
-            scheduleLoginRefreshes(get().refreshCodexAuth)
+            scheduleLoginRefreshes(() => get().refreshCodexAuth(true))
           }
         } catch (error) {
           if (hasNativeLoginModal()) {
@@ -487,15 +499,31 @@ export const useStore = create<AppState>()(
         })
       },
 
-      refreshCodexAuth: async () => {
+      refreshCodexAuth: async (revealLoginAccounts = false) => {
         try {
           const status = await invoke<CodexAuthStatus>('codex_auth_status')
-          set((state) => ({
-            codexAuth: status,
-            activeAccountId: activeIdFromStatus(status, state.accounts, state.hiddenAccountKeys),
-            lastSync: new Date(),
-            mergedAccounts: mergeAccounts(state.accounts, status, state.hiddenAccountKeys),
-          }))
+          set((state) => {
+            const activeEmail = normalizeKey(status.accounts.find((account) => account.active)?.email)
+            const baseline = loginAccountBaselineEmails ?? new Set<string>()
+            const revealedAccounts = new Set(
+              revealLoginAccounts
+                ? status.accounts
+                  .map((account) => normalizeKey(account.email))
+                  .filter((email) => email && (email === activeEmail || !baseline.has(email)))
+                : [],
+            )
+            const hiddenAccountKeys = state.hiddenAccountKeys.filter(
+              (key) => !revealedAccounts.has(normalizeKey(key)),
+            )
+
+            return {
+              codexAuth: status,
+              activeAccountId: activeIdFromStatus(status, state.accounts, hiddenAccountKeys),
+              hiddenAccountKeys,
+              lastSync: new Date(),
+              mergedAccounts: mergeAccounts(state.accounts, status, hiddenAccountKeys),
+            }
+          })
 
           if (
             get().autoSwitchEnabled

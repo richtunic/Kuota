@@ -1,6 +1,12 @@
 # CHANGELOG_AI
 
 Fecha: 2026-10-22
+Tarea: Preparar hotfix Kuota 1.0.11 para mostrar la cuenta autenticada
+Cambios: El login nativo obtiene una lista base antes de iniciar; al completarse, Kuota revela la cuenta activa y las cuentas nuevas detectadas por ese flujo, quitándolas de claves ocultas sin restaurar las demás cuentas borradas. Versiones sincronizadas y notas bilingües en `docs/releases/v1.0.11.md`.
+Validacion: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check` pasaron. Pendiente commit/tag y publicación.
+Seguridad: Sin cambios en credenciales ni en el almacenamiento de sesiones; no se agregan dependencias.
+
+Fecha: 2026-10-22
 Tarea: Preparar release Kuota 1.0.10
 Cambios: Version sincronizada en los manifests, lockfiles y el modal Acerca de. `docs/releases/v1.0.10.md` documenta en español e inglés las correcciones de cuenta activa, cuentas ocultas y refresco después del login por código.
 Validacion: `npm run build`, `npm run lint`, `cargo fmt --check`, `cargo check --locked`, `cargo test --locked` (9 pruebas) y `git diff --check` pasaron. Commit `a90e959` y tag `v1.0.10` publicados en GitHub; workflow 39907796704 completado correctamente para macOS universal y Windows x64. Release pública verificada con notas bilingües y ocho assets, incluido `latest.json`.

@@ -1,6 +1,12 @@
 # DECISIONS
 
 Fecha: 2026-10-22
+Decisión: Durante el login exitoso, revelar la cuenta autenticada si Kuota la mantenía oculta localmente.
+Motivo: El estado local de la app instalada puede tener claves ocultas que no existen en el almacenamiento de desarrollo; eso hacía parecer que la cuenta se añadió en debug pero no en la app instalada.
+Alternativas descartadas: Borrar todas las claves ocultas después de cualquier login, porque volvería a mostrar cuentas que el usuario había quitado deliberadamente.
+Impacto: El login revela la cuenta activa y las cuentas nuevas detectadas durante ese flujo; las demás cuentas ocultas se conservan. Preparado como Kuota 1.0.11.
+
+Fecha: 2026-10-22
 Decisión: Publicar las correcciones de cuenta activa, ocultamiento persistente y refresco de login como Kuota `1.0.10`.
 Motivo: Son correcciones visibles que deben llegar a usuarios instalados mediante el actualizador firmado.
 Alternativas descartadas: Mantener la versión `1.0.9`, porque los clientes no detectarían la actualización.
