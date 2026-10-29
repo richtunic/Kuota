@@ -6,7 +6,7 @@ Cambios: Versiones sincronizadas en npm, Cargo, Tauri y Acerca de. Notas biling�
 Validación: El usuario confirmó el cambio de cuenta de extremo a extremo con la build local. La versión 1.0.12 pasó npm run build, npm run lint, cargo fmt --check, cargo check --locked --offline y git diff --check. Las 11 pruebas Rust de la corrección también pasaron antes del bump de versión.
 Seguridad: Sin cambios de autenticación, secretos, dependencias ni sesiones.
 
-Build local macOS de prueba: `src-tauri/target/release/bundle/macos/Kuota.app` generado sin artefacto updater porque la clave privada de firma de releases solo está configurada en CI. El tag v1.0.12 inicia la publicación oficial firmada.
+Publicado: commit `bf04e22` y tag `v1.0.12` enviados a GitHub. Workflow 40947124326 completado correctamente en macOS universal y Windows x64; Release pública verificada con ocho assets firmados y `latest.json` version 1.0.12 con plataformas macOS Intel/Apple Silicon y Windows x64.
 
 Fecha: 2026-10-29
 Tarea: Corregir la espera de cierre y verificar la reapertura de Desktop en macOS.
