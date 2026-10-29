@@ -1,5 +1,19 @@
 # CHANGELOG_AI
 
+Fecha: 2026-10-29
+Tarea: Preparar Kuota 1.0.12 con la corrección de reapertura de ChatGPT/Codex.
+Cambios: Versiones sincronizadas en npm, Cargo, Tauri y Acerca de. Notas bilingües en `docs/releases/v1.0.12.md`; el fix espera el cierre real y verifica que Desktop reaparezca.
+Validación: El usuario confirmó el cambio de cuenta de extremo a extremo con la build local. La versión 1.0.12 pasó npm run build, npm run lint, cargo fmt --check, cargo check --locked --offline y git diff --check. Las 11 pruebas Rust de la corrección también pasaron antes del bump de versión.
+Seguridad: Sin cambios de autenticación, secretos, dependencias ni sesiones.
+
+Build local macOS de prueba: `src-tauri/target/release/bundle/macos/Kuota.app` generado sin artefacto updater porque la clave privada de firma de releases solo está configurada en CI. El tag v1.0.12 inicia la publicación oficial firmada.
+
+Fecha: 2026-10-29
+Tarea: Corregir la espera de cierre y verificar la reapertura de Desktop en macOS.
+Cambios: Sustituida la espera fija de 800 ms por sondeo del proceso principal (hasta 20 s). Cada intento de apertura verifica que el proceso aparezca (hasta 10 s). Se conservan bundle ID y fallbacks ChatGPT/Codex. Los comandos de cambio manual/automático y apertura propagan errores; el mensaje de cambio aclara que la cuenta ya fue cambiada.
+Validación: Build frontend/tipado, lint, cargo check --locked y cargo test --locked (11 pruebas) pasan. Pruebas nuevas de cierre demorado, timeout de arranque/cierre y fallo de inspección de procesos. No se ha reproducido el ciclo real con la app anfitriona.
+Seguridad: Sin nuevas dependencias, cambios de credenciales ni terminación forzada. No se modifica el flujo Windows/CLI.
+
 Fecha: 2026-10-22
 Tarea: Preparar hotfix Kuota 1.0.11 para mostrar la cuenta autenticada
 Cambios: El login nativo obtiene una lista base antes de iniciar; al completarse, Kuota revela la cuenta activa y las cuentas nuevas detectadas por ese flujo, quitándolas de claves ocultas sin restaurar las demás cuentas borradas. Versiones sincronizadas y notas bilingües en `docs/releases/v1.0.11.md`.

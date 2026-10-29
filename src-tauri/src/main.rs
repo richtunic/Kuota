@@ -291,7 +291,8 @@ async fn codex_auth_status() -> CodexAuthStatus {
 async fn switch_codex_account(selector: String) -> Result<CodexAuthStatus, String> {
     let target = detect_codex_target();
     run_codex_auth_command(&["switch", selector.as_str()])?;
-    restart_codex_target(target);
+    restart_codex_target(target)
+        .map_err(|error| format!("Account changed, but Desktop could not restart: {error}"))?;
     Ok(read_codex_auth_status(npm_latest_codex_auth_version().ok()))
 }
 
@@ -329,7 +330,8 @@ async fn auto_switch_codex_account() -> Result<Option<CodexAuthStatus>, String> 
     let target = detect_codex_target();
     run_codex_auth_command(&["switch", candidate.email.as_str()])?;
     if matches!(target, CodexTarget::Desktop) {
-        restart_codex_target(CodexTarget::Desktop);
+        restart_codex_target(CodexTarget::Desktop)
+            .map_err(|error| format!("Account changed, but Desktop could not restart: {error}"))?;
     }
 
     Ok(Some(read_codex_auth_status(None)))
@@ -444,8 +446,7 @@ async fn codex_auth_open_authorization_url(url: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn open_codex() -> Result<(), String> {
-    restart_codex_target(CodexTarget::Desktop);
-    Ok(())
+    restart_codex_target(CodexTarget::Desktop)
 }
 
 #[tauri::command]
@@ -993,6 +994,34 @@ mod tests {
     }
 
     #[test]
+    fn desktop_waits_until_shutdown_really_finishes() {
+        let mut observations = [true, true, false].into_iter();
+        assert!(super::wait_for_desktop_state(
+            || Ok(observations.next().expect("unexpected extra poll")),
+            false,
+            std::time::Duration::from_secs(2),
+        )
+        .unwrap());
+        assert_eq!(observations.next(), None);
+    }
+
+    #[test]
+    fn desktop_launch_without_a_process_is_not_success() {
+        assert!(
+            !super::wait_for_desktop_state(|| Ok(false), true, std::time::Duration::ZERO,).unwrap()
+        );
+        assert!(
+            !super::wait_for_desktop_state(|| Ok(true), false, std::time::Duration::ZERO,).unwrap()
+        );
+        assert!(super::wait_for_desktop_state(
+            || Err("ps failed".into()),
+            false,
+            std::time::Duration::ZERO,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn parses_v030_columns_without_confusing_credits_with_usage() {
         let output = "     ACCOUNT  PLAN  CREDITS  RESET CREDITS  5H  WEEKLY  LAST ACTIVITY\n\
                       * 01 plus@example.com  Plus  0  3  93% (16:38)  81% (14:10 on 20 Sep)  Now\n\
@@ -1246,10 +1275,13 @@ fn detect_codex_target() -> CodexTarget {
     CodexTarget::None
 }
 
-fn restart_codex_target(target: CodexTarget) {
+fn restart_codex_target(target: CodexTarget) -> Result<(), String> {
     match target {
         CodexTarget::Desktop | CodexTarget::None => restart_codex_desktop(),
-        CodexTarget::Cli => open_codex_cli(),
+        CodexTarget::Cli => {
+            open_codex_cli();
+            Ok(())
+        }
     }
 }
 
@@ -1258,28 +1290,79 @@ fn macos_codex_desktop_running(processes: &str) -> bool {
         || processes.contains("/Codex.app/Contents/MacOS/")
 }
 
-fn restart_codex_desktop() {
+#[cfg(any(target_os = "macos", test))]
+fn wait_for_desktop_state(
+    mut running: impl FnMut() -> Result<bool, String>,
+    expected: bool,
+    timeout: std::time::Duration,
+) -> Result<bool, String> {
+    let started = std::time::Instant::now();
+    loop {
+        if running()? == expected {
+            return Ok(true);
+        }
+        if started.elapsed() >= timeout {
+            return Ok(false);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_desktop_running() -> Result<bool, String> {
+    let output = hidden_command("/bin/ps")
+        .args(["-axo", "comm="])
+        .output()
+        .map_err(|error| format!("Could not inspect Desktop processes: {error}"))?;
+    if !output.status.success() {
+        return Err("Could not inspect Desktop processes".to_string());
+    }
+    Ok(macos_codex_desktop_running(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+fn restart_codex_desktop() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let _ = hidden_command("osascript")
-            .args(["-e", "tell application id \"com.openai.codex\" to quit"])
-            .status();
-        std::thread::sleep(std::time::Duration::from_millis(800));
-        let opened = hidden_command("open")
-            .args(["-b", "com.openai.codex"])
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false);
-        if !opened {
-            let opened_chatgpt = hidden_command("open")
-                .args(["-a", "ChatGPT"])
+        if macos_desktop_running()? {
+            let status = hidden_command("/usr/bin/osascript")
+                .args(["-e", "with timeout of 20 seconds\ntell application id \"com.openai.codex\" to quit\nend timeout"])
+                .status()
+                .map_err(|error| format!("Could not request Desktop shutdown: {error}"))?;
+            if !status.success() && macos_desktop_running()? {
+                return Err("Desktop rejected the shutdown request".to_string());
+            }
+        }
+        // A successful quit request does not mean Electron has finished exiting.
+        if !wait_for_desktop_state(
+            macos_desktop_running,
+            false,
+            std::time::Duration::from_secs(20),
+        )? {
+            return Err("Desktop did not finish closing; reopen it manually".to_string());
+        }
+        for args in [
+            ["-b", "com.openai.codex"],
+            ["-a", "ChatGPT"],
+            ["-a", "Codex"],
+        ] {
+            let opened = hidden_command("/usr/bin/open")
+                .args(args)
                 .status()
                 .map(|status| status.success())
                 .unwrap_or(false);
-            if !opened_chatgpt {
-                let _ = hidden_command("open").args(["-a", "Codex"]).spawn();
+            if opened
+                && wait_for_desktop_state(
+                    macos_desktop_running,
+                    true,
+                    std::time::Duration::from_secs(10),
+                )?
+            {
+                return Ok(());
             }
         }
+        return Err("Desktop did not reopen; open ChatGPT or Codex manually".to_string());
     }
 
     #[cfg(target_os = "windows")]
@@ -1304,6 +1387,8 @@ fn restart_codex_desktop() {
             let _ = open_windows_codex_cli();
         }
     }
+    #[cfg(not(target_os = "macos"))]
+    Ok(())
 }
 
 fn open_codex_cli() {

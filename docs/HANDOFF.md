@@ -1,5 +1,15 @@
 # HANDOFF
 
+## Actualización 2026-10-29: reapertura de Desktop en macOS — Kuota 1.0.12
+
+- Se eliminó la espera fija de 800 ms: Kuota sondea el proceso principal hasta que termina y comprueba su aparición tras open.
+- Se propagan fallos de cierre, inspección o apertura al frontend. El error después de switch aclara que la cuenta ya fue cambiada.
+- Build frontend/tipado, lint, cargo check --locked y 11 pruebas Rust pasan.
+- El usuario probó el cambio de cuenta con la build local y confirmó que ChatGPT/Codex volvió a abrirse correctamente.
+- No hay cambios en tokens, sesiones, dependencias, Windows ni CLI. No se publicó una release ni se reemplazó la instalación del usuario.
+- CLAUDE.md sigue sin seguimiento y no fue modificado.
+- Versión 1.0.12 preparada en manifests y notas. Publicar el commit y tag v1.0.12 para iniciar los builds oficiales; comprobar workflow y assets antes de cerrar.
+
 ## Actualización 2026-10-22: hotfix 1.0.11 para cuenta recién autenticada
 
 - Al iniciar el login, Kuota registra los correos ya conocidos por `codex-auth`; después del éxito revela la cuenta activa y las cuentas nuevas que detecte, aunque una clave local las haya ocultado previamente.

@@ -1,5 +1,17 @@
 # DECISIONS
 
+Fecha: 2026-10-29
+Decisión: Publicar la espera y verificación de reapertura de Desktop en Kuota 1.0.12.
+Motivo: El usuario confirmó que el cambio de cuenta con la compilación local ahora vuelve a abrir ChatGPT/Codex. El arreglo necesita llegar a usuarios instalados mediante el actualizador firmado.
+Alternativas descartadas: Mantener 1.0.11, porque los clientes instalados no recibirían el arreglo.
+Impacto: Versiones en npm, Cargo, Tauri y Acerca de; notas bilingües y publicación por el tag v1.0.12 para builds macOS/Windows y latest.json.
+
+Fecha: 2026-10-29
+Decisión: Esperar el cierre real de Desktop y comprobar su proceso tras la apertura en macOS.
+Motivo: La espera fija de 800 ms permite enviar open mientras Electron aún termina; un código cero de open no demuestra que se haya iniciado otro proceso. Es un defecto verificable del flujo anterior, compatible con el síntoma reportado; la causa concreta en la máquina no se ha confirmado con reproducción.
+Alternativas descartadas: Aumentar otra espera fija o forzar el cierre, porque no resuelven la sincronización de forma fiable o podrían interrumpir trabajo.
+Impacto: Esperas acotadas, propagación de errores y compatibilidad con nombres existentes. El cambio de cuenta no se revierte si falla la reapertura. Windows conserva su comportamiento previo.
+
 Fecha: 2026-10-22
 Decisión: Durante el login exitoso, revelar la cuenta autenticada si Kuota la mantenía oculta localmente.
 Motivo: El estado local de la app instalada puede tener claves ocultas que no existen en el almacenamiento de desarrollo; eso hacía parecer que la cuenta se añadió en debug pero no en la app instalada.
